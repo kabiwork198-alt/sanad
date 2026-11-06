@@ -25,6 +25,24 @@ class SanadTest(unittest.TestCase):
         app.DATA, app.DB = self.old_data, self.old_db
         self.tmp.cleanup()
 
+    def test_frozen_app_keeps_data_outside_temporary_bundle(self):
+        bundle = Path(self.tmp.name) / 'temporary-bundle'
+        local = Path(self.tmp.name) / 'local-app-data'
+        with mock.patch.object(app.sys, 'frozen', True, create=True), \
+             mock.patch.object(app.sys, '_MEIPASS', str(bundle), create=True), \
+             mock.patch.dict(app.os.environ, {'LOCALAPPDATA': str(local)}, clear=True):
+            root, data = app.runtime_paths()
+        self.assertEqual(root, bundle.resolve())
+        self.assertEqual(data, (local / 'SanadStudio').resolve())
+        self.assertNotEqual(data.parent, root)
+
+    def test_frozen_app_respects_explicit_data_directory(self):
+        target = Path(self.tmp.name) / 'other-data'
+        with mock.patch.object(app.sys, 'frozen', True, create=True), \
+             mock.patch.dict(app.os.environ, {'SANAD_DATA_DIR': str(target)}, clear=True):
+            _, data = app.runtime_paths()
+        self.assertEqual(data, target.resolve())
+
     def test_save_and_read_unicode(self):
         p = project()
         app.save_project(p)

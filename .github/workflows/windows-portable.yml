@@ -1,0 +1,59 @@
+name: Build Windows portable app
+
+on:
+  push:
+    branches:
+      - 'arena/592bf7be-sanad'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test application
+        run: python -m unittest discover -s tests -v
+      - name: Install build tool
+        run: python -m pip install pyinstaller==6.11.1
+      - name: Build standalone executable
+        run: python -m PyInstaller --noconfirm --clean --onefile --console --name Sanad-Studio --add-data "web;web" launch.py
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          $env:SANAD_DATA_DIR = Join-Path $env:RUNNER_TEMP 'sanad-smoke-data'
+          $process = Start-Process -FilePath "$PWD\dist\Sanad-Studio.exe" -PassThru
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              if ($process.HasExited) { throw 'Application exited before responding.' }
+              try {
+                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8765/' -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200 -and $response.Content -match 'سَنَد') { $ok = $true; break }
+              } catch { }
+            }
+            if (-not $ok) { throw 'Executable did not serve the local application.' }
+            $script = Invoke-WebRequest -Uri 'http://127.0.0.1:8765/app.js' -UseBasicParsing -TimeoutSec 2
+            if ($script.StatusCode -ne 200 -or $script.Content -notmatch 'projectTemplate') { throw 'Bundled assets are missing.' }
+          } finally {
+            if (-not $process.HasExited) { & taskkill /PID $process.Id /T /F | Out-Null }
+          }
+      - name: Add instructions
+        shell: pwsh
+        run: Copy-Item docs/windows-portable.txt dist/README.txt
+      - name: Upload portable application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sanad-Studio-Windows
+          path: |
+            dist/Sanad-Studio.exe
+            dist/README.txt
+          if-no-files-found: error
+          retention-days: 30

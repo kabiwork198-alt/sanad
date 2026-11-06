@@ -17,8 +17,20 @@ from pathlib import Path
 
 from sanad import workflow
 
-ROOT = Path(__file__).resolve().parent.parent
-DATA = Path(os.environ.get('SANAD_DATA_DIR', str(ROOT / '.sanad-data'))).expanduser().resolve()
+def runtime_paths():
+    # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
+    # User data must live elsewhere so it survives closing or updating the exe.
+    if getattr(sys, 'frozen', False):
+        root = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
+        default_data = Path(os.environ.get('LOCALAPPDATA') or (Path.home() / 'AppData' / 'Local')) / 'SanadStudio'
+    else:
+        root = Path(__file__).resolve().parent.parent
+        default_data = root / '.sanad-data'
+    data = Path(os.environ.get('SANAD_DATA_DIR') or default_data).expanduser().resolve()
+    return root.resolve(), data
+
+
+ROOT, DATA = runtime_paths()
 DB = DATA / 'sanad.sqlite3'
 HOST, PORT = '127.0.0.1', 8765
 TOKEN = secrets.token_urlsafe(32)
@@ -245,6 +257,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(errors='replace')
     connect().close()
     try:
         server = ThreadingHTTPServer((HOST, PORT), Handler)
