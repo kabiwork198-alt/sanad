@@ -84,6 +84,16 @@ class SanadTest(unittest.TestCase):
         with urllib.request.urlopen(req) as r: self.assertEqual(r.status,200)
         req = urllib.request.Request(base+'/api/projects', headers={'X-Sanad-Token':app.TOKEN})
         with urllib.request.urlopen(req) as r: self.assertEqual(json.load(r)['projects'][0]['title'], 'اختبار')
+        payload = project()
+        payload['sources'] = [{'id':'b'*32, 'title':'كتاب'}]
+        payload['claims'] = [{'text':'ادعاء يراجعه الباحث', 'status':'مدعوم', 'sourceId':'b'*32, 'location':'ص ١٠'}]
+        req = urllib.request.Request(base+'/api/draft', data=json.dumps({'project':payload}).encode(), headers={'X-Sanad-Token':app.TOKEN,'Content-Type':'application/json','Origin':base})
+        with urllib.request.urlopen(req) as r:
+            draft = json.load(r)
+            self.assertIn('ادعاء يراجعه الباحث', draft['text'])
+            self.assertEqual(draft['included'], 1)
+        req = urllib.request.Request(base+'/api/analyze', data=json.dumps({'project':payload}).encode(), headers={'X-Sanad-Token':app.TOKEN,'Content-Type':'application/json','Origin':base})
+        with urllib.request.urlopen(req) as r: self.assertIn('لا يثبت صحة', json.load(r)['warning'])
         req = urllib.request.Request(base+'/api/save', data=b'{}', headers={'X-Sanad-Token':app.TOKEN,'Origin':'http://evil.example'})
         with self.assertRaises(urllib.error.HTTPError) as cm: urllib.request.urlopen(req)
         self.assertEqual(cm.exception.code,403)

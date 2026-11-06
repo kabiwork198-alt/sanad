@@ -15,6 +15,8 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from sanad import workflow
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get('SANAD_DATA_DIR', str(ROOT / '.sanad-data'))).expanduser().resolve()
 DB = DATA / 'sanad.sqlite3'
@@ -94,6 +96,23 @@ def search_crossref(query):
         authors = item.get('author') or []
         result.append({'title': str(titles[0]) if titles else 'بلا عنوان', 'author': ', '.join((' '.join(filter(None, [x.get('given'), x.get('family')])) for x in authors[:5])), 'url': str(item.get('URL', '')), 'doi': str(item.get('DOI', '')), 'type': str(item.get('type', ''))})
     return result
+
+
+def search_openlibrary(query):
+    if not isinstance(query, str) or not query.strip() or len(query) > 300:
+        raise ValueError('أدخل عبارة بحث لا تتجاوز 300 حرف')
+    params = {'q': query.strip(), 'limit': 10, 'fields': 'key,title,author_name,first_publish_year'}
+    req = urllib.request.Request('https://openlibrary.org/search.json?' + urllib.parse.urlencode(params), headers={'Accept': 'application/json', 'User-Agent': 'SanadStudio/0.1'})
+    with urllib.request.urlopen(req, timeout=15) as response:
+        payload = json.loads(response.read(2_000_000))
+    results = []
+    for item in payload.get('docs', []):
+        key = item.get('key', '')
+        if not isinstance(key, str) or not re.fullmatch(r'/works/OL[0-9]+W', key):
+            continue
+        authors = item.get('author_name') or []
+        results.append({'title': str(item.get('title', 'بلا عنوان')), 'author': ', '.join(str(a) for a in authors[:5]), 'url': 'https://openlibrary.org' + key, 'year': str(item.get('first_publish_year', ''))})
+    return results
 
 
 def search_youtube(query, key):
@@ -190,6 +209,18 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:
                     db.execute('DELETE FROM projects WHERE id=?', (ident,))
                 return self.send(200, {'ok': True})
+            if path in ('/api/suggestions', '/api/analyze', '/api/draft', '/api/prepare-prompt'):
+                project = body.get('project')
+                validate_project(project)
+                if path == '/api/suggestions':
+                    return self.send(200, {'suggestions': workflow.suggestions(project)})
+                if path == '/api/analyze':
+                    return self.send(200, workflow.analyze(project))
+                if path == '/api/prepare-prompt':
+                    return self.send(200, {'prompt': workflow.script_prompt(project)})
+                return self.send(200, workflow.script_draft(project))
+            if path == '/api/openlibrary':
+                return self.send(200, {'results': search_openlibrary(body.get('query', ''))})
             if path == '/api/youtube':
                 return self.send(200, {'results': search_youtube(body.get('query', ''), body.get('key', ''))})
             if path == '/api/crossref':
