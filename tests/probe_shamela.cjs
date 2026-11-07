@@ -1,0 +1,25 @@
+// Diagnostic only: public official MCP, no user data, no crawling or index reconstruction.
+const base='https://mcp.shamela.ws';
+const notice=s=>console.log('::notice file=tests/probe_shamela.cjs,line=1::'+String(s).replaceAll('%','%25').replaceAll('\n','%0A').slice(0,50000));
+(async()=>{
+  let session='';
+  async function req(method,params,id){
+    const headers={'Accept':'application/json, text/event-stream','Content-Type':'application/json'};
+    if(session)headers['Mcp-Session-Id']=session;
+    const body={jsonrpc:'2.0',method,params};if(id!==undefined)body.id=id;
+    const response=await fetch(base,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
+    session=response.headers.get('mcp-session-id')||session;
+    const text=await response.text();if(text.length>1000000)throw Error('response too large');
+    let parsed;try{if(text.trim().startsWith('{'))parsed=JSON.parse(text);else{const d=text.split('\n').find(l=>l.startsWith('data:'));if(d)parsed=JSON.parse(d.slice(5));}}catch{}
+    return {status:response.status,type:response.headers.get('content-type'),parsed,body:text.slice(0,1000)};
+  }
+  try {
+    const pre=await fetch(base,{method:'OPTIONS',headers:{Origin:'https://kabiwork198-alt.github.io','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,accept'},signal:AbortSignal.timeout(15000)});
+    notice('Shamela browser preflight HTTP '+pre.status+' ACAO='+pre.headers.get('access-control-allow-origin')+' headers='+pre.headers.get('access-control-allow-headers'));
+    const init=await req('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'sanad-diagnostic',version:'1.0'}},1);
+    notice('Shamela init: '+JSON.stringify({status:init.status,data:init.parsed||init.body}));
+    if(init.status!==200||!init.parsed?.result)return;
+    const ack=await req('notifications/initialized',{},undefined);notice('Shamela initialized notification HTTP '+ack.status);
+    const list=await req('tools/list',{},2);notice('Shamela tools list: '+JSON.stringify({status:list.status,data:list.parsed||list.body}));
+  } catch(e) {notice('Shamela probe unavailable: '+e.name+': '+e.message)}
+})().catch(e=>{console.error(e);process.exitCode=1});
