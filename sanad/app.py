@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
 
-from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive
+from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -117,6 +117,24 @@ def save_project(project):
 def all_projects():
     with closing(connect()) as db, db:
         return [json.loads(row[0]) for row in db.execute('SELECT data FROM projects ORDER BY updated DESC, rowid DESC')]
+
+
+def import_projects(projects):
+    """Validate all projects first, then insert the copies in one transaction."""
+    if not isinstance(projects, list) or not 1 <= len(projects) <= 100:
+        raise ValueError('عدد المشاريع غير صالح')
+    encoded = [validate_project(project) for project in projects]
+    ids = [project['id'] for project in projects]
+    if len(set(ids)) != len(ids):
+        raise ValueError('معرّفات المشاريع مكررة')
+    with closing(connect()) as db, db:
+        try:
+            for project, data in zip(projects, encoded):
+                db.execute('INSERT INTO projects (id,title,updated,data) VALUES (?,?,?,?)',
+                           (project['id'], project['title'].strip(), int(time.time()), data))
+        except sqlite3.IntegrityError as exc:
+            raise ValueError('أحد المشاريع موجود مسبقًا؛ لم يُستبدل أي مشروع') from exc
+    return {'count': len(projects)}
 
 
 def search_crossref(query):
@@ -299,6 +317,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, alexandria_archive.search(body.get('query', '')))
             if path == '/api/alexandria/read':
                 return self.send(200, alexandria_archive.read_article(body.get('article_id', '')))
+            if path == '/api/qdl/search':
+                return self.send(200, qdl.search(body.get('id', ''), body.get('query', '')))
             if path == '/api/turath/search':
                 return self.send(200, turath.search(body.get('query', '')))
             if path == '/api/turath/read':
@@ -315,6 +335,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, research_search(body.get('query', ''), body.get('provider')))
             if path == '/api/library/import':
                 return self.send(200, {'document': library.import_document(DATA, body.get('name', ''), body.get('content', ''))})
+            if path == '/api/library/export':
+                return self.send(200, {'document': library.export_document(DATA, body.get('id', ''))})
+            if path == '/api/projects/import':
+                return self.send(200, import_projects(body.get('projects')))
             if path == '/api/library/search':
                 return self.send(200, library.search_document(DATA, body.get('id', ''), body.get('query', '')))
             if path == '/api/save':

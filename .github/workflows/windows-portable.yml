@@ -36,6 +36,8 @@ jobs:
           }
       - name: Diagnose live public source access on Windows
         run: python tests/live_windows_sources.py
+      - name: Diagnose Qatar record search
+        run: python -c "import runpy; runpy.run_path('tests/live_qdl.py')"
       - name: Build standalone executable
         run: python -m PyInstaller --noconfirm --clean --onefile --console --name Sanad-Studio --add-data "web;web" launch.py
       - name: Smoke test executable

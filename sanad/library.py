@@ -43,7 +43,27 @@ def import_document(data_dir, name, encoded):
                 f.write(content)
         except FileExistsError:
             pass
+    # Never report success while an existing content-addressed file is corrupt.
+    if target.stat().st_size != len(content) or hashlib.sha256(target.read_bytes()).hexdigest() != ident:
+        raise ValueError('الملف المحلي الموجود تالف؛ لم يُستبدل. احتفظ بنسخة منه وأعد إرفاق الملف بعد حل المشكلة')
     return {'id': ident, 'name': name.replace('\\', '/').split('/')[-1], 'size': len(content), 'kind': suffix[1:]}
+
+
+def export_document(data_dir, ident):
+    """Export only a content-addressed local file, verifying it before backup."""
+    if not isinstance(ident, str) or not re.fullmatch(r'[0-9a-f]{64}', ident):
+        raise ValueError('معرّف الملف غير صالح')
+    path = Path(data_dir) / 'library' / (ident + '.bin')
+    if not path.is_file():
+        raise ValueError('ملف مرتبط مفقود؛ أعد إرفاقه قبل إنشاء نسخة شاملة')
+    if path.stat().st_size > MAX_FILE:
+        raise ValueError('ملف مرتبط أكبر من الحد المسموح')
+    data = path.read_bytes()
+    if not data or len(data) > MAX_FILE or hashlib.sha256(data).hexdigest() != ident:
+        raise ValueError('ملف مرتبط تالف أو لا تطابق بصمته المعرّف')
+    kind = 'pdf' if b'%PDF-' in data[:1024] else 'txt'
+    return {'id': ident, 'name': ident + '.' + kind, 'size': len(data),
+            'content': base64.b64encode(data).decode('ascii')}
 
 
 def normalize(text):

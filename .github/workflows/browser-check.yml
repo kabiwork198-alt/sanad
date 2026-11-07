@@ -38,6 +38,14 @@ jobs:
         run: node tests/check_live_services.cjs
       - name: Install browser test driver
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
+      - name: Test complete backup interoperability
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_backup.py
+      - name: Test Qatar record search interface
+        run: |
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_qdl.cjs
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_qdl.py
+      - name: Diagnose Qatar record search in Chromium
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_qdl.cjs
       - name: Diagnose Alexandria MCP real browser initialization
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_alexandria_browser.cjs
       - name: Test Alexandria MCP local UI

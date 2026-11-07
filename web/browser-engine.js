@@ -106,6 +106,24 @@ window.SANAD_BROWSER = true;
     catch(e) { if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال');if(/^HTTP [0-9]{3}$/.test(e?.message||''))throw e;throw Error('تعذر الاتصال أو قراءة الاستجابة؛ قد يكون الاتصال أو وصول المتصفح محجوبًا.'); }
     finally {clearTimeout(timer);}
   }
+  async function searchQdl(id,q) {
+    if(typeof id!=='string'||!/^vdc_[0-9]{1,20}\.0x[0-9a-fA-F]{6,16}$/.test(id))throw Error('معرّف سجل مكتبة قطر غير صالح');
+    if(typeof q!=='string'||q.trim().length<2||q.trim().length>200)throw Error('أدخل عبارة بحث من حرفين إلى 200 حرف');
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);let d;
+    try {
+      const r=await fetch('https://www.qdl.qa/en/annos/search/81055/'+id+'?'+params({q:q.trim()}),{signal:controller.signal,credentials:'omit',redirect:'error'});
+      if(!r.ok)throw Error('HTTP '+r.status);
+      if(Number(r.headers.get('Content-Length')||0)>2000000)throw Error('استجابة البحث كبيرة جدًا');
+      let size=0,chunks=[];
+      if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>2000000){await reader.cancel();throw Error('استجابة البحث كبيرة جدًا')}chunks.push(part.value)}}finally{reader.releaseLock()}}
+      else {const part=new Uint8Array(await r.arrayBuffer());size=part.length;if(size>2000000)throw Error('استجابة البحث كبيرة جدًا');chunks=[part]}
+      const bytes=new Uint8Array(size);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length}d=JSON.parse(new TextDecoder().decode(bytes));
+    }catch(e){if(e.name==='AbortError')throw Error('انتهت مهلة الاتصال بمكتبة قطر');if(e instanceof TypeError)throw Error('تعذر الاتصال بمكتبة قطر أو منع المتصفح الاستجابة؛ جرّب Windows أو افتح السجل');throw e}finally{clearTimeout(timer)}
+    if(!d||!Array.isArray(d.hits))throw Error('الوثيقة لا تتيح نتائج بحث مدعومة؛ افتح سجل المكتبة');
+    const hits=d.hits.filter(x=>x&&typeof x['item-url']==='string'&&/^81055\/vdc_[0-9]{1,20}\.0x[0-9a-fA-F]{6,16}$/.test(x['item-url'])).slice(0,20).map(x=>({url:'https://www.qdl.qa/en/archive/'+x['item-url'],match:typeof x.match==='string'?x.match.slice(0,200):''}));
+    const total=Number.isSafeInteger(d.within?.total)&&d.within.total>=0?d.within.total:null;
+    return {hits,total,warning:'مطابقات البحث تحدد صفحات محتملة فقط وقد تخطئ بسبب OCR أو نقص الفهرسة؛ افتح صورة الصفحة وراجع سياقها ورقمها وحقوقها. عدم العثور لا يثبت الغياب.'};
+  }
   async function crossref(q) {
     const d = await getJSON('https://api.crossref.org/works?'+params({'query.bibliographic':queryText(q),rows:'10',select:'DOI,title,author,published,URL,type'}));
     return (d.message?.items||[]).map(x=>({title:x.title?.[0]||'بلا عنوان',author:(x.author||[]).slice(0,5).map(a=>[a.given,a.family].filter(Boolean).join(' ')).join(', '),url:x.URL||'',doi:x.DOI||'',type:x.type||''}));
@@ -353,6 +371,17 @@ window.SANAD_BROWSER = true;
     await documentStore('readwrite',id,bytes);
     return {id,name:name.replace(/\\/g,'/').split('/').pop(),size:bytes.length,kind:name.split('.').pop().toLowerCase()};
   }
+  async function exportDocument(id) {
+    if(typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))throw Error('معرّف الملف غير صالح');
+    const bytes=await documentStore('readonly',id);
+    if(!bytes)throw Error('ملف مرتبط مفقود؛ أعد إرفاقه قبل إنشاء نسخة شاملة');
+    if(!bytes.length||bytes.length>MAX_FILE)throw Error('حجم الملف المرتبط غير صالح');
+    const digest=await crypto.subtle.digest('SHA-256',bytes),actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+    if(actual!==id)throw Error('ملف مرتبط تالف أو لا تطابق بصمته المعرّف');
+    const head=new TextDecoder().decode(bytes.slice(0,1024)),name=id+(head.includes('%PDF-')?'.pdf':'.txt');
+    let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
+    return {id,name,size:bytes.length,content:btoa(binary)};
+  }
   async function searchDocument(id,query) {
     if(typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))throw Error('معرّف الملف غير صالح');
     if(typeof query!=='string'||trim(query).length<2||query.length>200||!normalize(query).trim())throw Error('أدخل عبارة بحث من حرفين إلى 200 حرف');
@@ -387,7 +416,14 @@ window.SANAD_BROWSER = true;
     if(path==='/api/projects')return {projects:projects()};
     if(path==='/api/save'){validate(data.project);const items=projects().filter(x=>x.id!==data.project.id);items.unshift(data.project);writeProjects(items);return {ok:true};}
     if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
+    if(path==='/api/projects/import'){
+      if(!Array.isArray(data.projects)||data.projects.length<1||data.projects.length>100)throw Error('عدد المشاريع غير صالح');
+      data.projects.forEach(validate);const existing=projects(),ids=new Set(existing.map(p=>p.id));
+      for(const p of data.projects){if(ids.has(p.id))throw Error('أحد المشاريع موجود مسبقًا؛ لم يُستبدل أي مشروع');ids.add(p.id)}
+      writeProjects([...data.projects,...existing]);return {count:data.projects.length};
+    }
     if(path==='/api/topics')return topics();
+    if(path==='/api/qdl/search')return searchQdl(data.id,data.query);
     if(path==='/api/turath/search')return searchTurath(data.query);
     if(path==='/api/turath/read')return readTurath(data.book_id,data.page_id);
     if(path==='/api/internet-archive/read')return readInternetArchive(data.identifier);
@@ -399,6 +435,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/openlibrary')return {results:await openlibrary(data.query)};
     if(path==='/api/youtube')return {results:await youtube(data.query,data.key)};
     if(path==='/api/library/import')return {document:await importDocument(data.name,data.content)};
+    if(path==='/api/library/export')return {document:await exportDocument(data.id)};
     if(path==='/api/library/search')return searchDocument(data.id,data.query);
     if(path==='/api/lm'||path==='/api/prepare-prompt')throw Error('Qwen غير متاح من نسخة المتصفح؛ استخدم نسخة Windows المحلية.');
     if(['/api/suggestions','/api/analyze','/api/draft'].includes(path)){
