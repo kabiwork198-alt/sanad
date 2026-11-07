@@ -16,6 +16,8 @@ jobs:
           node-version: '22'
       - run: node --check web/app.js
       - run: node --check web/browser-engine.js
+      - run: node --check web/mineru-import.js
+      - run: node tests/test_mineru_import.cjs
       - run: node tests/test_browser_engine.cjs
       - run: node tests/test_archive_browser.cjs
   live-service-report:
@@ -49,6 +51,8 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_ocr_pages.cjs
       - name: Diagnose OCR on a historic public-domain Arabic scan
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_ocr_scan.py
+      - name: Test MinerU result import in browser and local modes
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_mineru.py
       - name: Test complete backup interoperability
         run: |
           set +e

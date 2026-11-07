@@ -1,0 +1,122 @@
+{
+  "metadata": {
+    "file_suffix": "pdf",
+    "producer": {
+      "name": "mineru",
+      "version": "4.1.7"
+    },
+    "document": {
+      "languages": [
+        "en-US@posix"
+      ],
+      "created_at": "2026-11-07T15:46:35+00:00",
+      "modified_at": "2026-11-07T15:46:35+00:00",
+      "creator_application": "Chromium",
+      "producer_application": "Skia/PDF m133",
+      "page_count": 2,
+      "page_count_kind": "physical"
+    }
+  },
+  "extensions": {
+    "mineru": {
+      "tier": "flash",
+      "parse_mode": "txt"
+    },
+    "docvortex_layout": {
+      "version": 1,
+      "pages": [
+        {
+          "page_idx": 0,
+          "width_pt": 595.9199829101562,
+          "height_pt": 841.9199829101562
+        },
+        {
+          "page_idx": 1,
+          "width_pt": 595.9199829101562,
+          "height_pt": 841.9199829101562
+        }
+      ]
+    }
+  },
+  "pages": [
+    {
+      "page_idx": 0,
+      "blocks": [
+        {
+          "type": "paragraph_title",
+          "index": 0,
+          "bbox": [
+            0.01377366159634715,
+            0.011872828632877573,
+            0.35511478249772394,
+            0.03998001452368806
+          ],
+          "content": [
+            {
+              "type": "text",
+              "content": "History archive"
+            }
+          ],
+          "level": 2
+        },
+        {
+          "type": "text",
+          "index": 1,
+          "bbox": [
+            0.012041885360534223,
+            0.062058137234425624,
+            0.26223320035237174,
+            0.07599773148024973
+          ],
+          "content": [
+            {
+              "type": "text",
+              "content": "Baghdad is a historic city."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "page_idx": 1,
+      "blocks": [
+        {
+          "type": "paragraph_title",
+          "index": 0,
+          "bbox": [
+            0.012968183495803219,
+            0.023453574111152682,
+            0.3009967785292915,
+            0.05156076000196317
+          ],
+          "content": [
+            {
+              "type": "text",
+              "content": "Second page"
+            }
+          ],
+          "level": 2
+        },
+        {
+          "type": "text",
+          "index": 1,
+          "bbox": [
+            0.011397503040133034,
+            0.07452970371139893,
+            0.3226439954799242,
+            0.08846929795722305
+          ],
+          "content": [
+            {
+              "type": "text",
+              "content": "Sources require careful review."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "is_full_document": true,
+  "schema": "docvortex.middle",
+  "schema_version": "2.0"
+}

@@ -448,9 +448,13 @@ window.SANAD_BROWSER = true;
       } catch(e) {if(e?.name==='PasswordException')throw Error('هذا الملف محمي أو مشفر؛ لا يتجاوز سَنَد الحماية. أضف نسخة مسموحة قابلة للقراءة.');throw Error('تعذر قراءة PDF؛ قد يكون تالفًا أو لا يدعمه المتصفح.');}
     } else {
       let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}catch{throw Error('تعذر قراءة الملف النصي')};scanned=1;
-      const isOpeniti=text.startsWith('######OpenITI#');let carry=[];
+      const isOpeniti=text.startsWith('######OpenITI#'),isMineru=text.startsWith('#SANAD-MINERU-TEXT-1\n');let carry=[],mineruPage=null;
       for(const [i,line] of text.split(/\r?\n/).entries()){
-        if(isOpeniti){
+        if(isMineru){
+          const marker=/^#SANAD-PAGE:([1-9][0-9]{0,6})$/.exec(line);
+          if(marker){mineruPage=Number(marker[1]);continue}
+          if(mineruPage!==null&&line.startsWith('| ')&&normalize(line.slice(2)).includes(needle))matches.push({location:`صفحة PDF ${mineruPage} بحسب MinerU؛ طابقها بالأصل`,text:excerpt(line.slice(2),needle)});
+        }else if(isOpeniti){
           if(!line.trim()||line.startsWith('# ')||line.startsWith('### '))carry=[];
           const cleaned=line.replace(/^~~\s?/,''),previous=carry.map(x=>x.text).join(' '),joined=(previous?previous+' ':'')+cleaned,previousLength=normalize(previous).length,pos=normalize(joined).indexOf(needle,Math.max(0,previousLength-needle.length+1));
           if(pos>=0&&pos+needle.length>previousLength){const first=normalize(cleaned).includes(needle)?i+1:(carry[0]?.line||i+1),location=first===i+1?`السطر ${i+1}`:`الأسطر ${first}–${i+1}`;matches.push({location:location+' (نص OpenITI الخام، ليس رقم صفحة)',text:excerpt(joined,needle)});}
@@ -458,6 +462,7 @@ window.SANAD_BROWSER = true;
         }else if(normalize(line).includes(needle))matches.push({location:`السطر ${i+1}`,text:excerpt(line,needle)});
         if(matches.length>=MAX_MATCHES)break;
       }
+      if(isMineru)fileWarningForSearch='نتيجة MinerU مستوردة وقد تحذف عناصر أو تخطئ في ترتيب العربية وقراءة الصفحات. رقم الصفحة من ملف النتيجة؛ طابقه مع الأصل والطبعة.';
       if(isOpeniti)fileWarningForSearch='نص OpenITI الخام قد يحتوي وسومًا وأخطاء؛ الأسطر ليست صفحات الطبعة. طابق المقتطف مع الأصل وراجع الحقوق.';
     }
     return {matches,scanned,total,partial:scanned<total||matches.length>=MAX_MATCHES,warning:fileWarningForSearch};

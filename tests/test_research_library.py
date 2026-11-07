@@ -45,6 +45,17 @@ class LibraryTest(unittest.TestCase):
         self.assertIn('للتجربة', result['matches'][0]['text'])
         self.assertTrue((self.root / 'library' / (doc['id'] + '.bin')).exists())
 
+    def test_mineru_imported_pages_search_and_marker_escape(self):
+        text = '#SANAD-MINERU-TEXT-1\n#SANAD-PAGE:1\n| Baghdad historical archive\n| #SANAD-PAGE:999\n#SANAD-PAGE:2\n| Sources require careful review.\n'
+        doc = library.import_document(self.root, 'mineru.txt', base64.b64encode(text.encode()).decode())
+        page1 = library.search_document(self.root, doc['id'], 'Baghdad')
+        page2 = library.search_document(self.root, doc['id'], 'careful review')
+        fake = library.search_document(self.root, doc['id'], 'SANAD-PAGE:999')
+        self.assertIn('PDF 1', page1['matches'][0]['location'])
+        self.assertIn('PDF 2', page2['matches'][0]['location'])
+        self.assertIn('PDF 1', fake['matches'][0]['location'])
+        self.assertIn('الأصل', page2['warning'])
+
     def test_search_rejects_corrupted_content_addressed_file(self):
         doc = library.import_document(self.root, 'book.txt', base64.b64encode('نص بغداد'.encode()).decode())
         (self.root / 'library' / (doc['id'] + '.bin')).write_text('نص تغير', encoding='utf-8')

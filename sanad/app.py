@@ -298,12 +298,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed_host():
             return self.send(403, {'error': 'طلب غير مسموح'})
         path = urllib.parse.urlsplit(self.path).path
-        if path in ('/', '/index.html', '/app.js', '/style.css'):
+        if path in ('/', '/index.html', '/app.js', '/style.css', '/mineru-import.js'):
             name = 'index.html' if path in ('/', '/index.html') else path[1:]
             content = (ROOT / 'web' / name).read_bytes()
             if name == 'index.html':
                 content = content.replace(b'__SANAD_TOKEN__', TOKEN.encode('ascii'))
-            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'mineru-import.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
         vendor = {
             '/vendor/pdf.min.mjs': ('pdf.min.mjs', 'text/javascript; charset=utf-8'),
             '/vendor/pdf.worker.min.mjs': ('pdf.worker.min.mjs', 'text/javascript; charset=utf-8'),

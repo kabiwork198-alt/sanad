@@ -141,9 +141,18 @@ def search_document(data_dir, ident, query):
             raise ValueError('تعذر قراءة الملف النصي')
         scanned = 1
         is_openiti = text.startswith('######OpenITI#')
+        is_mineru = text.startswith('#SANAD-MINERU-TEXT-1\n')
+        mineru_page = None
         carry = []
         for number, line in enumerate(text.splitlines(), 1):
-            if is_openiti:
+            if is_mineru:
+                marker = re.fullmatch(r'#SANAD-PAGE:([1-9][0-9]{0,6})', line)
+                if marker:
+                    mineru_page = int(marker.group(1))
+                    continue
+                if mineru_page is not None and line.startswith('| ') and needle in normalize(line[2:]):
+                    matches.append({'location': f'صفحة PDF {mineru_page} بحسب MinerU؛ طابقها بالأصل', 'text': excerpt(line[2:], needle)})
+            elif is_openiti:
                 if not line.strip() or line.startswith('# ' ) or line.startswith('### '):
                     carry = []
                 cleaned = re.sub(r'^~~\s?', '', line)
@@ -164,6 +173,8 @@ def search_document(data_dir, ident, query):
             if len(matches) >= MAX_MATCHES:
                 break
     warning = 'النص مستخرج آليًا وقد يتضمن أخطاء. طابقه مع النسخة الأصلية. لا يُقرأ النص من الصور الممسوحة ضوئيًا دون OCR.'
+    if not pdf and is_mineru:
+        warning = 'نتيجة MinerU مستوردة وقد تحذف عناصر أو تخطئ في ترتيب العربية وقراءة الصفحات. رقم الصفحة من ملف النتيجة؛ طابقه مع الأصل والطبعة.'
     if not pdf and is_openiti:
         warning = 'نص OpenITI الخام قد يحتوي وسومًا وأخطاء؛ الأسطر ليست صفحات الطبعة. طابق المقتطف مع الأصل وراجع الحقوق.'
     return {'matches': matches, 'scanned': scanned, 'total': total_pages, 'partial': scanned < total_pages or len(matches) >= MAX_MATCHES, 'warning': warning}
