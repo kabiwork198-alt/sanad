@@ -121,8 +121,16 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_archive.cjs
       - name: Test Internet Archive OCR import in browser and local app
         run: |
-          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_archive.cjs
-          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_archive.py
+          set +e
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_archive.cjs > "$RUNNER_TEMP/archive-test.log" 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_archive.py >> "$RUNNER_TEMP/archive-test.log" 2>&1; status=$?; fi
+          cat "$RUNNER_TEMP/archive-test.log"
+          if [ "$status" -ne 0 ]; then
+            detail=$(tail -20 "$RUNNER_TEMP/archive-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+            echo "::error title=Archive OCR UI test failed::$detail"
+          fi
+          exit "$status"
       - name: Test Turath MCP UI in browser and local app
         run: |
           NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_turath.cjs
