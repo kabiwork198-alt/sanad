@@ -19,10 +19,11 @@ class Remote(io.RawIOBase):
             data=r.read(n+1)
         if len(data)!=n:raise ValueError('range size mismatch')
         self.requests+=1;self.pos+=len(data);return data
-try:
-    f=Remote()
-    with zipfile.ZipFile(f) as z:
-        members=z.infolist();files=[i for i in members if not i.is_dir()]
-        print('::notice file=tests/probe_openiti_release.py,line=1::OpenITI primary ZIP directory: files=%d unpacked=%d ranges=%d examples=%s' % (len(files),sum(i.file_size for i in files),f.requests,[i.filename for i in files[:8]]))
-except Exception as exc:
-    print('::notice file=tests/probe_openiti_release.py,line=1::OpenITI ZIP diagnostic unavailable: %s %s' % (type(exc).__name__,str(exc)[:160]))
+if __name__ == "__main__":
+    try:
+        f=Remote()
+        with zipfile.ZipFile(f) as z:
+            members=z.infolist();files=[i for i in members if not i.is_dir()]
+            print('::notice file=tests/probe_openiti_release.py,line=1::OpenITI primary ZIP directory: files=%d unpacked=%d ranges=%d examples=%s' % (len(files),sum(i.file_size for i in files),f.requests,[i.filename for i in files[:8]]))
+    except Exception as exc:
+        print('::notice file=tests/probe_openiti_release.py,line=1::OpenITI ZIP diagnostic unavailable: %s %s' % (type(exc).__name__,str(exc)[:160]))

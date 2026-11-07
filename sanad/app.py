@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
 
-from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl
+from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl, openiti_corpus
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -256,6 +256,16 @@ def lm_request(path, body=None):
         return json.loads(response.read(2_000_000))
 
 
+_corpus_manager = None
+_corpus_lock = threading.Lock()
+def corpus_manager():
+    global _corpus_manager
+    with _corpus_lock:
+        if _corpus_manager is None or _corpus_manager.root != DATA / 'openiti-corpus':
+            _corpus_manager = openiti_corpus.Corpus(DATA)
+        return _corpus_manager
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Do not log content or queries; this process is intended for local use.
@@ -341,6 +351,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, shamela.search(body.get('query', '')))
             if path == '/api/shamela/read':
                 return self.send(200, shamela.read_page(body.get('book_id', ''), body.get('page_id', '')))
+            if path == '/api/openiti/corpus/status':
+                return self.send(200, corpus_manager().status())
+            if path == '/api/openiti/corpus/install':
+                corpus_manager().install(); return self.send(200, {'ok':True})
+            if path == '/api/openiti/corpus/book':
+                return self.send(200, corpus_manager().read_book(body.get('uri')))
+            if path == '/api/openiti/corpus/search':
+                corpus_manager().search(body.get('query')); return self.send(200, {'ok':True})
+            if path == '/api/openiti/corpus/cancel':
+                return self.send(200, {'cancelled':corpus_manager().cancel()})
+            if path == '/api/openiti/corpus/remove':
+                corpus_manager().remove(); return self.send(200, {'ok':True})
             if path == '/api/openiti/read':
                 return self.send(200, openiti.read_text(body.get('path', '')))
             if path == '/api/openiti/search':

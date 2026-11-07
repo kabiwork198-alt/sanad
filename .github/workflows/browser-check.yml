@@ -79,6 +79,10 @@ jobs:
           exit "$status"
       - name: Diagnose Turath MCP real browser initialization
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_turath_browser.cjs
+      - name: Test OpenITI corpus local install, search and save UI
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_openiti_corpus.py
+      - name: Diagnose searching real texts from the OpenITI primary ZIP
+        run: python tests/live_openiti_corpus.py
       - name: Diagnose official OpenITI release ZIP directory
         run: python tests/probe_openiti_release.py
       - name: Probe Internet Archive text access in a browser
@@ -117,3 +121,14 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_backend.py
       - name: Check mobile browser against live public services
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/live_browser.cjs
+  full-corpus-diagnostic:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download and search the full official corpus (diagnostic, 2.86 GB)
+        run: python tests/diagnose_full_openiti.py

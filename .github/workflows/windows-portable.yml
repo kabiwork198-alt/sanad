@@ -42,6 +42,8 @@ jobs:
         run: python -c "import runpy; runpy.run_path('tests/live_wikisource_multilingual.py')"
       - name: Diagnose live Open Library editions and OCR
         run: python -c "import runpy; runpy.run_path('tests/live_openlibrary_editions.py')"
+      - name: Diagnose local search over real OpenITI ZIP sample
+        run: python tests/live_openiti_corpus.py
       - name: Build standalone executable
         run: python -m PyInstaller --noconfirm --clean --onefile --console --name Sanad-Studio --add-data "web;web" launch.py
       - name: Install real OCR browser test driver
@@ -71,6 +73,8 @@ jobs:
             $env:SANAD_TEST_PYTHON = (Get-Command python).Source
             node tests/ui_ocr.cjs
             if ($LASTEXITCODE -ne 0) { throw 'Bundled executable OCR test failed.' }
+            node tests/ui_exe_corpus.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled executable corpus status test failed.' }
           } finally {
             if (-not $process.HasExited) { & taskkill /PID $process.Id /T /F | Out-Null }
           }
