@@ -248,5 +248,6 @@ def openlibrary_editions(work_id, offset=0):
                          'language':', '.join(languages)[:100]})
     return {'work_url':'https://openlibrary.org/works/'+work_id, 'offset':offset, 'total':total,
             'has_more':len(data['entries'])==20 and (total is None or offset+20<total) and offset<1000,
+            'truncated':offset==1000 and len(data['entries'])==20 and (total is None or offset+20<total),
             'editions':editions,
             'warning':'هذه سجلات طبعات، وليست إثباتًا لإتاحة النص أو تطابق الطبعة أو حقوقها. افتح سجل الطبعة والأرشيف للتحقق؛ قد يكون بعضها للإعارة أو بلا OCR.'}

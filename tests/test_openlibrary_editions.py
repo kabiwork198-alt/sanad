@@ -30,6 +30,10 @@ class OpenLibraryEditionTests(unittest.TestCase):
         entries=[{'key':f'/books/OL{i}M'} for i in range(1,21)]
         with mock.patch('sanad.catalogs.get_json',return_value={'size':21,'entries':entries}):
             self.assertTrue(catalogs.openlibrary_editions('OL1W')['has_more'])
+        with mock.patch('sanad.catalogs.get_json',return_value={'size':1021,'entries':entries}):
+            last=catalogs.openlibrary_editions('OL1W',1000)
+            self.assertFalse(last['has_more'])
+            self.assertTrue(last['truncated'])
         with mock.patch('sanad.catalogs.get_json',return_value={'entries':'not a list'}):
             with self.assertRaises(ValueError):catalogs.openlibrary_editions('OL1W')
 

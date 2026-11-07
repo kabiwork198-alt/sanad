@@ -163,7 +163,7 @@ window.SANAD_BROWSER = true;
       const publishers=Array.isArray(e.publishers)?e.publishers:[],languages=Array.isArray(e.languages)?e.languages:[];
       editions.push({title:String(e.title||'بلا عنوان').slice(0,300),edition_url:'https://openlibrary.org'+e.key,archive_id:ia,archive_url:ia?'https://archive.org/details/'+ia:'',date:String(e.publish_date||'').slice(0,100),publisher:publishers.slice(0,5).map(String).join(', ').slice(0,300),language:languages.slice(0,8).filter(x=>x&&typeof x.key==='string'&&/^\/languages\/[A-Za-z]{3}$/.test(x.key)).map(x=>x.key.split('/').pop()).join(', ').slice(0,100)});
     }
-    return {work_url:'https://openlibrary.org/works/'+workId,offset,total,has_more:d.entries.length===20&&(total===null||offset+20<total)&&offset<1000,editions,warning:'هذه سجلات طبعات، وليست إثباتًا لإتاحة النص أو تطابق الطبعة أو حقوقها. افتح سجل الطبعة والأرشيف للتحقق؛ قد يكون بعضها للإعارة أو بلا OCR.'};
+    return {work_url:'https://openlibrary.org/works/'+workId,offset,total,has_more:d.entries.length===20&&(total===null||offset+20<total)&&offset<1000,truncated:offset===1000&&d.entries.length===20&&(total===null||offset+20<total),editions,warning:'هذه سجلات طبعات، وليست إثباتًا لإتاحة النص أو تطابق الطبعة أو حقوقها. افتح سجل الطبعة والأرشيف للتحقق؛ قد يكون بعضها للإعارة أو بلا OCR.'};
   }
   async function wikiCitations(q) {
     const search=await getJSON(wikiAPI({action:'query',list:'search',srsearch:q,srlimit:'1',srnamespace:'0'}));
