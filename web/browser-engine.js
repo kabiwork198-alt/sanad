@@ -119,7 +119,9 @@ window.SANAD_BROWSER = true;
     if(typeof d.parse?.text!=='string')throw Error('استجابة ويكيبيديا غير صالحة');
     // Parse only isolated citation text, never insert remote HTML into the live page.
     const out=[];const pattern=/<li\b[^>]*\bid\s*=\s*["'](cite_note-[^"']+)["'][^>]*>([\s\S]*?)<\/li>/gi;
-    for(const match of d.parse.text.matchAll(pattern)){
+    // MediaWiki may encode underscores in HTML id attributes as numeric entities.
+    const html=d.parse.text.replace(/&#(?:0*95|x0*5f);/gi,'_');
+    for(const match of html.matchAll(pattern)){
       const plain=match[2].replace(/<[^>]*>/g,' ');
       const text=(new DOMParser().parseFromString(plain,'text/html').body.textContent||'').replace(/\s+/g,' ').trim().slice(0,600);
       if(!text)continue;

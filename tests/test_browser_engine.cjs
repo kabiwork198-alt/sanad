@@ -20,7 +20,7 @@ const context = {
       const q=new URL(url).searchParams;
       if(q.get('list')==='categorymembers')return {ok:true,json:async()=>({query:{categorymembers:[{pageid:1319,title:'الخوارزمي'}]}})};
       if(q.get('list')==='search')return {ok:true,json:async()=>({query:{search:[{pageid:1319,title:'الخوارزمي'}]}})};
-      if(q.get('action')==='parse')return {ok:true,json:async()=>({parse:{text:'<ol><li id="cite_note-1"><span>عنوان المرجع <b>صفحة ١٠</b></span></li></ol>'}})};
+      if(q.get('action')==='parse')return {ok:true,json:async()=>({parse:{text:'<ol><li id="cite&#95;note-1"><span>عنوان المرجع <b>صفحة ١٠</b></span></li></ol>'}})};
     }
     throw Error('unexpected network request');
   },

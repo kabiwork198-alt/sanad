@@ -98,7 +98,7 @@ class WikipediaTest(unittest.TestCase):
 
     def test_citations_preserve_the_origin_and_do_not_claim_reading(self):
         search = {'query': {'search': [{'pageid':1319, 'title':'الخوارزمي'}]}}
-        parsed = {'parse': {'text':'<ol><li id="cite_note-1"><span>اسم المرجع <b>صفحة ١٠</b></span></li><li>irrelevant</li></ol>'}}
+        parsed = {'parse': {'text':'<ol><li id="cite&#95;note-1"><span>اسم المرجع <b>صفحة ١٠</b></span></li><li>irrelevant</li></ol>'}}
         with mock.patch('sanad.wikipedia.get_json', side_effect=[search, parsed]):
             result = wikipedia.citations('الخوارزمي')
         self.assertEqual(len(result), 1)
