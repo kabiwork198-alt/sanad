@@ -4,7 +4,21 @@ const origin=process.env.SANAD_TEST_ORIGIN;if(!origin)throw Error('SANAD_TEST_OR
  browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
  const page=await browser.newPage(),errors=[];let accept=true;
  page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>accept?d.accept(d.type()==='prompt'?'اختبار التوثيق':undefined):d.dismiss());
- await page.goto(origin,{waitUntil:'load'});await page.click('#empty-new');await page.click('[data-tab="sources"]');
+ await page.goto(origin,{waitUntil:'load'});
+ // Check provenance through the actual browser and local library adapters.
+ const provenance=await page.evaluate(async()=>{
+  const cases=[
+   ['######OpenITI#\n# تمهيد سابق\n~~تفاصيل أخرى\n~~ورد القاضي\n~~بغداد بعدها\n','القاضي بغداد'],
+   ['######OpenITI#\r\n# مقدمة\u2028تتمة\r\n~~ورد القاضي\r\n~~بغداد بعدها\r\n','القاضي بغداد'],
+   ['######OpenITI#\n# رواية موثقة قديمة\n~~'+'ب'.repeat(300)+'\n~~'+'س'.repeat(1300)+' رواية موثقة حديثة\n','رواية موثقة']
+  ];
+  const results=[];for(const [text,query] of cases){const doc=(await api('/api/library/import',{name:'provenance.txt',content:bytesToBase64(new TextEncoder().encode(text))})).document;results.push((await api('/api/library/search',{id:doc.id,query})).matches)}return results;
+ });
+ const cross=provenance[0].at(-1),unicode=provenance[1].at(-1),repeated=provenance[2].at(-1);
+ if(!cross?.location.includes('الأسطر 4–5')||!cross.text.includes('القاضي بغداد'))throw Error('wrong cross-line provenance: '+JSON.stringify(cross));
+ if(!unicode?.location.includes('الأسطر 3–4'))throw Error('wrong CRLF/Unicode source line: '+JSON.stringify(unicode));
+ if(!repeated?.location.includes('السطر 4')||!repeated.text.includes('رواية موثقة حديثة'))throw Error('wrong repeated-match excerpt: '+JSON.stringify(repeated));
+ await page.click('#empty-new');await page.click('[data-tab="sources"]');
  await page.evaluate(()=>{current.sources.push({id:uid(),title:'المصدر الأول',author:'',url:'',notes:'',workYear:'2000'});current.sources.push({id:uid(),title:'المصدر الثاني',author:'',url:'',notes:''});setDirty();render()});
  const set=async (selector,value)=>page.$eval(selector,(e,v)=>{e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}))},value);
  await set('[data-group="sources"][data-index="0"][data-item-field="edition"]','طبعة دار الاختبار');

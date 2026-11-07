@@ -86,6 +86,7 @@ jobs:
             Test-BundledUi 'tests/ui_hadith.cjs'
             node tests/live_hadith.cjs
             if ($LASTEXITCODE -ne 0) { Write-Warning 'Live hadith service unavailable; this diagnostic does not assess text or rights.' }
+            Test-BundledUi 'tests/ui_pdf_security.cjs'
             Test-BundledUi 'tests/ui_history.cjs'
             Test-BundledUi 'tests/ui_research_expanded.cjs'
             Test-BundledUi 'tests/ui_ocr_batch.cjs'

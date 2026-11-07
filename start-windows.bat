@@ -9,6 +9,6 @@ if %errorlevel% equ 0 (
 )
 if errorlevel 1 (
   echo.
-  echo Could not start Sanad. Install Python 3.9 or later and try again.
+  echo Could not start Sanad. Install Python 3.10 or later and try again.
   pause
 )

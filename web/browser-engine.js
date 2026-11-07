@@ -8,8 +8,8 @@ window.SANAD_BROWSER = true;
   const MAX_MATCHES = 12;
   const trim = x => String(x ?? '').trim();
   const normalize = (s,mode='basic') => {const value=String(s).normalize('NFKC').toLocaleLowerCase().replace(/[\p{M}\u0640]/gu, '');return mode==='arabic-variants'?value.replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي'):value};
-  function excerpt(text, needle, mode='basic') {
-    const at=normalize(text,mode).indexOf(needle);let pos=0,original=0;
+  function excerpt(text, needle, mode='basic', at=normalize(text,mode).indexOf(needle)) {
+    let pos=0,original=0;
     if(at>=0){for(const char of text){pos+=normalize(char,mode).length;if(pos>at)break;original+=char.length}}
     const start=Math.max(0,original-250);
     return (start ? '…' : '') + text.slice(start, start + 1000) + (text.length > start + 1000 ? '…' : '');
@@ -458,7 +458,13 @@ window.SANAD_BROWSER = true;
         }else if(isOpeniti){
           if(!line.trim()||line.startsWith('# ')||line.startsWith('### '))carry=[];
           const cleaned=line.replace(/^~~\s?/,''),previous=carry.map(x=>x.text).join(' '),joined=(previous?previous+' ':'')+cleaned,previousLength=normalize(previous,mode).length,pos=normalize(joined,mode).indexOf(needle,Math.max(0,previousLength-needle.length+1));
-          if(pos>=0&&pos+needle.length>previousLength){const first=normalize(cleaned,mode).includes(needle)?i+1:(carry[0]?.line||i+1),location=first===i+1?`السطر ${i+1}`:`الأسطر ${first}–${i+1}`;matches.push({location:location+' (نص OpenITI الخام، ليس رقم صفحة)',text:excerpt(joined,needle,mode)});}
+          if(pos>=0&&pos+needle.length>previousLength){
+            // Use the matching occurrence, not the oldest context or an earlier hit.
+            let first=i+1,offset=0;
+            if(pos<previousLength)for(const item of carry){const end=offset+normalize(item.text,mode).length;if(pos<end){first=item.line;break}offset=end+1}
+            const location=first===i+1?`السطر ${i+1}`:`الأسطر ${first}–${i+1}`;
+            matches.push({location:location+' (نص OpenITI الخام، ليس رقم صفحة)',text:excerpt(joined,needle,mode,pos)});
+          }
           carry.push({line:i+1,text:cleaned.slice(-400)});carry=carry.slice(-6);while(carry.reduce((n,x)=>n+x.text.length,0)>800&&carry.length>1)carry.shift();
         }else if(normalize(line,mode).includes(needle))matches.push({location:`السطر ${i+1}`,text:excerpt(line,needle,mode)});
         if(matches.length>=MAX_MATCHES)break;

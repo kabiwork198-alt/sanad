@@ -1,2 +1,2 @@
 # Optional when running from source; bundled in the Windows executable.
-pypdf==5.9.0
+pypdf==7.0.0

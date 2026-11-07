@@ -61,7 +61,9 @@ jobs:
       - name: Test the end-to-end researcher workflow in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_real_workflow.py
       - name: Install PDF test helper
-        run: python -m pip install pypdf==5.9.0
+        run: python -m pip install pypdf==7.0.0
+      - name: Test PDF extraction and malformed files in browser and local modes
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_pdf_security.py
       - name: Test real local Arabic and English OCR and PDF in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_ocr.py
       - name: Diagnose deployed Pages OCR after publishing

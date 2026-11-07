@@ -2,6 +2,8 @@ import base64
 import concurrent.futures
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -111,6 +113,26 @@ class LibraryTest(unittest.TestCase):
         result = library.search_document(self.root, doc['id'], 'documented')
         self.assertEqual(result['matches'][0]['location'], 'صفحة PDF 1')
         self.assertIn('documented excerpt', result['matches'][0]['text'])
+
+    @unittest.skipUnless(importlib.util.find_spec('pypdf'), 'pypdf not installed')
+    def test_malformed_xref_does_not_hang(self):
+        # Upstream regression case for GHSA-5849-834g-hvw5; isolate the
+        # test itself so a vulnerable parser cannot stall the test runner.
+        script = r"""
+import base64, tempfile
+from sanad import library
+pdf = b'%PDF-1.4\nstartxref\n28\n%%EOF\nxref\n1 0\naaa'
+with tempfile.TemporaryDirectory() as root:
+    doc = library.import_document(root, 'malformed.pdf', base64.b64encode(pdf).decode())
+    try:
+        library.search_document(root, doc['id'], 'test')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('malformed PDF should be rejected')
+"""
+        result = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(importlib.util.find_spec('pypdf'), 'pypdf not installed')
     def test_encrypted_pdf_is_not_bypassed(self):

@@ -47,6 +47,22 @@ class OpenitiTest(unittest.TestCase):
             self.assertIn('ليس رقم صفحة',result['matches'][0]['location'])
             self.assertIn('دفتر كان كثيرا',result['matches'][0]['text'])
 
+    def test_selected_openiti_occurrence_has_its_own_location_and_excerpt(self):
+        cases = [
+            ('######OpenITI#\n# تمهيد سابق\n~~تفاصيل أخرى\n~~ورد القاضي\n~~بغداد بعدها\n',
+             'القاضي بغداد', 'الأسطر 4–5', 'القاضي بغداد'),
+            ('######OpenITI#\r\n# مقدمة\u2028تتمة\r\n~~ورد القاضي\r\n~~بغداد بعدها\r\n',
+             'القاضي بغداد', 'الأسطر 3–4', 'القاضي بغداد'),
+            ('######OpenITI#\n# رواية موثقة قديمة\n~~' + 'ب' * 300 + '\n~~' + 'س' * 1300 + ' رواية موثقة حديثة\n',
+             'رواية موثقة', 'السطر 4', 'رواية موثقة حديثة'),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            for text, query, location, excerpt in cases:
+                doc = library.import_document(folder, 'book.txt', base64.b64encode(text.encode()).decode())
+                matches = library.search_document(folder, doc['id'], query)['matches']
+                self.assertIn(location, matches[-1]['location'])
+                self.assertIn(excerpt, matches[-1]['text'])
+
     def test_retry_only_requested_provider(self):
         with mock.patch('sanad.app.catalogs.doaj',return_value=[{'title':'x'}]) as source, \
              mock.patch('sanad.app.catalogs.openalex') as other:

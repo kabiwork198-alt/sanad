@@ -86,9 +86,9 @@ def normalize(text, mode='basic'):
     return value.translate(_ARABIC_VARIANTS) if mode == 'arabic-variants' else value
 
 
-def excerpt(line, needle, mode='basic'):
-    """Keep the match visible even in long OCR/wiki lines with diacritics."""
-    at = normalize(line, mode).find(needle)
+def excerpt(line, needle, mode='basic', at=None):
+    """Keep the selected match visible even in long lines with diacritics."""
+    if at is None: at = normalize(line, mode).find(needle)
     if at < 0: return line[:1000]
     offset = 0
     original = 0
@@ -149,7 +149,9 @@ def search_document(data_dir, ident, query, mode='basic'):
         is_batch_ocr = text.startswith('#SANAD-OCR-TEXT-1\n')
         paginated_page = None
         carry = []
-        lines = text.split('\n') if (is_mineru or is_batch_ocr) else text.splitlines()
+        # Count physical LF/CRLF lines consistently with the browser; Unicode
+        # separators inside a line are text, not source line breaks.
+        lines = re.split(r'\r?\n', text)
         for number, line in enumerate(lines, 1):
             if is_mineru or is_batch_ocr:
                 marker = re.fullmatch(r'#SANAD-PAGE:([1-9][0-9]{0,6})', line)
@@ -168,9 +170,20 @@ def search_document(data_dir, ident, query, mode='basic'):
                 previous_length = len(normalize(previous, mode))
                 pos = normalize(joined, mode).find(needle, max(0, previous_length - len(needle) + 1))
                 if pos >= 0 and pos + len(needle) > previous_length:
-                    first = number if needle in normalize(cleaned, mode) else (carry[0][0] if carry else number)
+                    # Locate the *selected* occurrence, not the first match in the
+                    # context or the oldest retained line. Earlier matches may be
+                    # hundreds of characters away and have already been reported.
+                    first = number
+                    if pos < previous_length:
+                        offset = 0
+                        for carried_line, part in carry:
+                            end = offset + len(normalize(part, mode))
+                            if pos < end:
+                                first = carried_line
+                                break
+                            offset = end + 1  # separator inserted by join
                     location = f'السطر {number}' if first == number else f'الأسطر {first}–{number}'
-                    matches.append({'location': location + ' (نص OpenITI الخام، ليس رقم صفحة)', 'text': excerpt(joined, needle, mode)})
+                    matches.append({'location': location + ' (نص OpenITI الخام، ليس رقم صفحة)', 'text': excerpt(joined, needle, mode, pos)})
                 carry.append((number, cleaned[-400:]))
                 carry = carry[-6:]
                 while sum(len(part) for _, part in carry) > 800 and len(carry) > 1:
