@@ -21,6 +21,9 @@ async function check(name,url){
    check('Wikimedia Commons','https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=1&prop=imageinfo&iiprop=url%7Cextmetadata&format=json&formatversion=2&origin=*&gsrsearch='+q),
    check('Arabic Wikisource','https://ar.wikisource.org/w/api.php?action=query&list=search&srnamespace=0&srlimit=1&format=json&formatversion=2&origin=*&srsearch='+q),
    check('Internet Archive','https://archive.org/advancedsearch.php?output=json&rows=1&fl%5B%5D=identifier&fl%5B%5D=title&q='+enc('\"الخوارزمي\" AND mediatype:texts')),
+   check('World Digital Library','https://www.loc.gov/collections/world-digital-library/?fo=json&at=results&c=1&q=Baghdad'),
+   check('Chronicling America','https://www.loc.gov/collections/chronicling-america/?fo=json&at=results&c=1&dl=page&qs=Baghdad'),
+   check('National Archives UK','https://discovery.nationalarchives.gov.uk/API/search/v1/records?sps.searchQuery=Palestine&sps.resultsPageSize=1'),
  ]);
  report('Wikipedia topic count: '+(topics?.query?.categorymembers?.length ?? 'unknown'));
  const id=search?.query?.search?.[0]?.pageid;
