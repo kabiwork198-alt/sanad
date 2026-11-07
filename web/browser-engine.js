@@ -118,7 +118,7 @@ window.SANAD_BROWSER = true;
       if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>2000000){await reader.cancel();throw Error('استجابة البحث كبيرة جدًا')}chunks.push(part.value)}}finally{reader.releaseLock()}}
       else {const part=new Uint8Array(await r.arrayBuffer());size=part.length;if(size>2000000)throw Error('استجابة البحث كبيرة جدًا');chunks=[part]}
       const bytes=new Uint8Array(size);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length}d=JSON.parse(new TextDecoder().decode(bytes));
-    }catch(e){if(e.name==='AbortError')throw Error('انتهت مهلة الاتصال بمكتبة قطر');if(e instanceof TypeError)throw Error('تعذر الاتصال بمكتبة قطر أو منع المتصفح الاستجابة؛ جرّب Windows أو افتح السجل');throw e}finally{clearTimeout(timer)}
+    }catch(e){if(e.name==='AbortError')throw Error('انتهت مهلة الاتصال بمكتبة قطر');if(e instanceof TypeError)throw Error('تعذر الاتصال بمكتبة قطر أو منع المتصفح الاستجابة؛ افتح السجل وابحث فيه على موقع المكتبة');throw e}finally{clearTimeout(timer)}
     if(!d||!Array.isArray(d.hits))throw Error('الوثيقة لا تتيح نتائج بحث مدعومة؛ افتح سجل المكتبة');
     const hits=d.hits.filter(x=>x&&typeof x['item-url']==='string'&&/^81055\/vdc_[0-9]{1,20}\.0x[0-9a-fA-F]{6,16}$/.test(x['item-url'])).slice(0,20).map(x=>({url:'https://www.qdl.qa/en/archive/'+x['item-url'],match:typeof x.match==='string'?x.match.slice(0,200):''}));
     const total=Number.isSafeInteger(d.within?.total)&&d.within.total>=0?d.within.total:null;
