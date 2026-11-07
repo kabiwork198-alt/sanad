@@ -31,5 +31,7 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
       - name: Test Wikisource import and search in a mobile browser
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_wikisource.cjs
+      - name: Test manual source workflow and responsive navigation
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_manual.cjs
       - name: Check mobile browser against live public services
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/live_browser.cjs
