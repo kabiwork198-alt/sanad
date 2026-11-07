@@ -7,5 +7,5 @@ const notice=x=>console.log('::notice title=Expanded research live diagnostic::'
  try{await p.waitForFunction(()=>researchResult?.plan&&researchTask===null,{timeout:210000})}catch(e){await p.click('#research-stop');await p.waitForFunction(()=>researchResult?.plan&&researchTask===null,{timeout:30000})}
  const info=await p.evaluate(()=>{const r=researchResult;return {queries:r.plan.queries.map(q=>({label:q.label,query:q.query,attempts:r.runs.filter(x=>x.query_id===q.id).map(x=>({provider:x.provider,status:x.status,count:x.count,reason:x.reason})),examples:r.results.filter(x=>x.appearances.some(a=>a.query_id===q.id)).slice(0,2).map(x=>x.title)})),unique:r.results.length,completed:r.runs.filter(x=>x.status==='اكتمل').length,failed:r.runs.filter(x=>x.status==='تعذر الاتصال أو قراءة الاستجابة').length,unattempted:r.runs.filter(x=>x.status==='لم تُنفذ').length}});
  notice(JSON.stringify({summary:{unique:info.unique,completed:info.completed,failed:info.failed,unattempted:info.unattempted}}));
- for(const q of info.queries)notice(JSON.stringify({query:q}));
+ for(let i=0;i<info.queries.length;i+=3)notice(JSON.stringify({queries:info.queries.slice(i,i+3)}));
  }catch(e){notice('Diagnostic unavailable: '+String(e.message).slice(0,250))}finally{if(browser)await browser.close()}})().catch(e=>notice('Diagnostic error: '+e.message));
