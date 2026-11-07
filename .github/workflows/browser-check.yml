@@ -21,6 +21,8 @@ jobs:
       - run: node --check web/ocr-journal.js
       - run: node --check web/history-dates.js
       - run: node --check web/hadith-lookup.js
+      - run: node --check web/text-alignment.js
+      - run: node tests/test_text_alignment.cjs
       - run: node tests/test_hadith_lookup.cjs
       - run: node tests/test_history_dates.cjs
       - run: node tests/test_research_planner.cjs
@@ -49,6 +51,8 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
       - name: Test responsive interface, save races and file integrity
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_quality.cjs && NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_initial_load.cjs
+      - name: Test attributed passage alignment in browser and local modes
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_text_alignment.py
       - name: Test one-record hadith lookup in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_hadith.py
       - name: Diagnose live Hadith API in Chromium (availability is not guaranteed)

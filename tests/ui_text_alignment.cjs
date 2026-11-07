@@ -1,0 +1,34 @@
+// End-to-end local journey with synthetic texts. No external requests are permitted.
+const puppeteer=require('puppeteer-core');const origin=process.env.SANAD_TEST_ORIGIN;if(!origin)throw Error('SANAD_TEST_ORIGIN required');
+(async()=>{let browser;try{
+ browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});const page=await browser.newPage(),errors=[],external=[];
+ page.on('dialog',d=>d.accept(d.type()==='prompt'?'مقارنة نصية تجريبية':undefined));page.on('pageerror',e=>errors.push(e.message));await page.setRequestInterception(true);page.on('request',r=>{const u=new URL(r.url());if(u.origin===new URL(origin).origin||['data:','blob:'].includes(u.protocol))return r.continue();external.push(u.href);return r.abort()});
+ await page.goto(origin,{waitUntil:'load'});await page.click('#empty-new');
+ await page.evaluate(async()=>{const texts=['في بغداد أقام القاضي أيامًا. <img src=x onerror=alert(1)>','في بغداد أقام القاضي شهرًا.'];for(let i=0;i<2;i++){const content=bytesToBase64(new TextEncoder().encode(texts[i]));const doc=(await api('/api/library/import',{name:`passage-${i}.txt`,content})).document;current.sources.push({id:uid(),title:`المصدر ${i+1}`,edition:`طبعة ${i+1}`,fileId:doc.id})}current.claims.push({id:uid(),text:'مدة الإقامة',status:'لم يُفحص'});setDirty()});
+ await page.click('[data-tab="sources"]');await page.type('#comparison-query','بغداد');for(const el of await page.$$('[data-compare-source]'))await el.click();await page.click('#comparison-search');await page.waitForSelector('[data-comparison-add="1:0"]');await page.select('#comparison-claim',await page.evaluate(()=>current.claims[0].id));await page.click('[data-comparison-add="0:0"]');await page.click('[data-comparison-add="1:0"]');
+ await page.click('[data-tab="claims"]');
+ const choose=async()=>{await page.select('[data-alignment-first]','0');await page.select('[data-alignment-second]','1')};
+ await choose();await page.click('[data-alignment-run="0"]');await page.waitForSelector('.alignment-pane');
+ let result=await page.$$eval('.alignment-pane',panes=>panes.map(p=>({text:p.querySelector('.alignment-text').textContent,body:p.textContent,marked:[...p.querySelectorAll('mark')].map(x=>x.textContent)})));
+ const excerpts=await page.evaluate(()=>current.evidence.map(e=>e.excerpt));if(result[0].text!==excerpts[0]||result[1].text!==excerpts[1]||!result[0].marked.join('').includes('أيامًا')||!result[1].marked.join('').includes('شهرًا'))throw Error('text was not preserved or distinct words not marked');
+ if(!result[0].body.includes('المصدر 1')||!result[0].body.includes('طبعة 1')||!result[0].body.includes('السطر'))throw Error('source, edition or location missing');
+ if(await page.$('.alignment-pane img'))throw Error('unsafe HTML was interpreted');
+ let state=await page.evaluate(()=>({claim:current.claims[0],evidence:current.evidence.map(e=>e.stance)}));if(state.claim.status!=='لم يُفحص'||state.evidence.some(s=>s!=='غير محسوم'))throw Error('automatic historical judgment');
+ for(const width of [320,390,1440]){await page.setViewport({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)>1)throw Error('overflow '+width)}
+ // Altering a cited excerpt must remove the old output immediately, even before blur.
+ await page.$eval('[data-group="evidence"][data-index="0"][data-item-field="excerpt"]',e=>{e.value+=' جديد';e.dispatchEvent(new Event('input',{bubbles:true}))});
+ if(await page.$('.alignment-pane'))throw Error('stale output after editing an excerpt');if(!(await page.$eval('[data-alignment-output]',e=>e.textContent)).includes('تغير'))throw Error('missing stale warning');
+ // Blur/change refreshes available choices as the researcher edits evidence.
+ await page.$eval('[data-group="evidence"][data-index="0"][data-item-field="excerpt"]',e=>e.dispatchEvent(new Event('change',{bubbles:true})));await choose();await page.click('[data-alignment-run="0"]');await page.waitForSelector('.alignment-pane');if(!(await page.$eval('.alignment-pane .alignment-text',e=>e.textContent)).includes('جديد'))throw Error('new excerpt not compared');
+ // Provenance and file changes must invalidate the temporary result too.
+ await page.evaluate(()=>{current.sources[0].fileId='e'.repeat(64);setDirty()});if(await page.$('.alignment-pane'))throw Error('stale output after source attachment changed');
+ await choose();await page.click('[data-alignment-run="0"]');await page.waitForSelector('.alignment-pane');await page.click('[data-tab="sources"]');
+ await page.$eval('[data-group="sources"][data-index="0"][data-item-field="edition"]',e=>{e.value='طبعة جديدة';e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))});await page.click('[data-tab="claims"]');if(await page.$('.alignment-pane'))throw Error('stale output after citation changed');
+ // Identical selection is rejected, and too-long inputs are not silently truncated.
+ await page.select('[data-alignment-first]','0');await page.select('[data-alignment-second]','0');await page.click('[data-alignment-run="0"]');if(!(await page.$eval('#toast',e=>e.textContent)).includes('مختلفين'))throw Error('same evidence accepted');
+ await page.$eval('[data-group="evidence"][data-index="0"][data-item-field="excerpt"]',e=>{e.value='ن'.repeat(5001);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))});await choose();await page.click('[data-alignment-run="0"]');if(!(await page.$eval('[data-alignment-output]',e=>e.textContent)).includes('5000'))throw Error('missing limit error');
+ await page.$eval('[data-group="evidence"][data-index="0"][data-item-field="excerpt"]',(e,text)=>{e.value=text;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))},excerpts[0]);
+ await page.click('#save');await page.waitForFunction(()=>!dirty&&!saveInFlight);const id=await page.evaluate(()=>current.id);await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${id}"]`);await page.click(`[data-project="${id}"]`);await page.click('[data-tab="claims"]');if(await page.$('.alignment-pane'))throw Error('temporary output persisted');await choose();await page.click('[data-alignment-run="0"]');await page.waitForSelector('.alignment-pane');
+ state=await page.evaluate(()=>({claim:current.claims[0],evidence:current.evidence}));if(state.claim.status!=='لم يُفحص'||state.evidence.length!==2||state.evidence.some(s=>s.stance!=='غير محسوم'))throw Error('unreviewed state changed after reload');
+ if(errors.length||external.length)throw Error(JSON.stringify({errors,external}));console.log('PASS: local multi-file excerpts, literal diff, provenance, safe HTML, stale guards, bounds and persistence');
+ }finally{if(browser)await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});

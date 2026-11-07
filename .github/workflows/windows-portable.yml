@@ -73,6 +73,8 @@ jobs:
             $env:SANAD_TEST_PYTHON = (Get-Command python).Source
             node tests/ui_real_workflow.cjs
             if ($LASTEXITCODE -ne 0) { throw 'Bundled executable end-to-end researcher workflow failed.' }
+            node tests/ui_text_alignment.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled executable passage alignment test failed.' }
             node tests/ui_hadith.cjs
             if ($LASTEXITCODE -ne 0) { throw 'Bundled executable hadith lookup test failed.' }
             node tests/live_hadith.cjs
