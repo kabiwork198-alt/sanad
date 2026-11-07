@@ -293,6 +293,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {'topics': wikipedia.topics(), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
             if path == '/api/wikisource/read':
                 return self.send(200, catalogs.read_wikisource(body.get('page_id', '')))
+            if path == '/api/openiti/read':
+                return self.send(200, openiti.read_text(body.get('path', '')))
             if path == '/api/openiti/search':
                 return self.send(200, openiti.search(body.get('query', '')))
             if path == '/api/research':

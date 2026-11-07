@@ -21,6 +21,7 @@ def check(name, fn):
 checks = [
     ('Wikisource selected revision', wiki),
     ('OpenITI index history search', lambda: f"matches={openiti.search('تاريخ الطبري')['total']}"),
+    ('OpenITI selected text', lambda: f"characters={len(openiti.read_text('data/0370CaribQurtubi/0370CaribQurtubi.SilaTarikhTabari/0370CaribQurtubi.SilaTarikhTabari.JK011178-ara1.completed')['text'])}"),
     ('DOAJ Baghdad', lambda: catalogs.doaj('Baghdad')),
     ('OpenAlex Baghdad no key', lambda: catalogs.openalex('Baghdad')),
     ('WDL Baghdad', lambda: catalogs.loc('Baghdad', 'world-digital-library')),

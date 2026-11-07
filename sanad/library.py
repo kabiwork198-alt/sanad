@@ -109,9 +109,30 @@ def search_document(data_dir, ident, query):
         except UnicodeDecodeError:
             raise ValueError('تعذر قراءة الملف النصي')
         scanned = 1
+        is_openiti = text.startswith('######OpenITI#')
+        carry = []
         for number, line in enumerate(text.splitlines(), 1):
-            if needle in normalize(line):
+            if is_openiti:
+                if not line.strip() or line.startswith('# ' ) or line.startswith('### '):
+                    carry = []
+                cleaned = re.sub(r'^~~\s?', '', line)
+                previous = ' '.join(part for _, part in carry)
+                joined = (previous + ' ' if previous else '') + cleaned
+                previous_length = len(normalize(previous))
+                pos = normalize(joined).find(needle, max(0, previous_length - len(needle) + 1))
+                if pos >= 0 and pos + len(needle) > previous_length:
+                    first = number if needle in normalize(cleaned) else (carry[0][0] if carry else number)
+                    location = f'السطر {number}' if first == number else f'الأسطر {first}–{number}'
+                    matches.append({'location': location + ' (نص OpenITI الخام، ليس رقم صفحة)', 'text': excerpt(joined, needle)})
+                carry.append((number, cleaned[-400:]))
+                carry = carry[-6:]
+                while sum(len(part) for _, part in carry) > 800 and len(carry) > 1:
+                    carry.pop(0)
+            elif needle in normalize(line):
                 matches.append({'location': f'السطر {number}', 'text': excerpt(line, needle)})
-                if len(matches) >= MAX_MATCHES:
-                    break
-    return {'matches': matches, 'scanned': scanned, 'total': total_pages, 'partial': scanned < total_pages or len(matches) >= MAX_MATCHES, 'warning': 'النص مستخرج آليًا وقد يتضمن أخطاء. طابقه مع النسخة الأصلية. لا يُقرأ النص من الصور الممسوحة ضوئيًا دون OCR.'}
+            if len(matches) >= MAX_MATCHES:
+                break
+    warning = 'النص مستخرج آليًا وقد يتضمن أخطاء. طابقه مع النسخة الأصلية. لا يُقرأ النص من الصور الممسوحة ضوئيًا دون OCR.'
+    if not pdf and is_openiti:
+        warning = 'نص OpenITI الخام قد يحتوي وسومًا وأخطاء؛ الأسطر ليست صفحات الطبعة. طابق المقتطف مع الأصل وراجع الحقوق.'
+    return {'matches': matches, 'scanned': scanned, 'total': total_pages, 'partial': scanned < total_pages or len(matches) >= MAX_MATCHES, 'warning': warning}

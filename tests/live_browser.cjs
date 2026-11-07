@@ -72,7 +72,15 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
     await page.click('[data-openiti-result="0"]');
     const source=await page.evaluate(()=>current.sources[current.sources.length-1]);
     if(!source.notes.includes('CC BY-NC-SA'))throw Error('License warning not retained');
-    report('OpenITI live browser: catalog loaded with consent, history search matches='+oi.total+', record and license saved (not full-text search)');
+    report('OpenITI live browser: catalog loaded with consent, history search matches='+oi.total+', record and license saved');
+    const index=await page.evaluate(()=>current.sources.length-1);
+    await page.click('[data-tab="sources"]');await page.click(`[data-openiti-read="${index}"]`);
+    await page.waitForSelector(`[data-local-search="${index}"]`,{timeout:100000});
+    await page.type(`[data-local-query="${index}"]`,'بعهد الخليفة إلينا');await page.click(`[data-local-search="${index}"]`);
+    await page.waitForSelector('[data-match="0"]',{timeout:100000});
+    const passage=await page.evaluate(()=>fileMatches.matches[0]);
+    if(!passage.text.includes('بعهد الخليفة إلينا')||!passage.location.includes('ليس رقم صفحة'))throw Error('Cross-line search or location missing');
+    report('OpenITI live full text: selected 14 MB Tabari version downloaded with consent, cross-line phrase found, raw line location not confused with page');
   } catch(e) { report('OpenITI live browser unavailable: '+String(e.message).slice(0,160)); }
 
   if(errors.length)throw Error('Browser script errors: '+errors.join('; '));

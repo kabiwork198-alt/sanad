@@ -214,6 +214,24 @@ window.SANAD_BROWSER = true;
     })().catch(e=>{openitiIndexPromise=null;throw e});
     return openitiIndexPromise;
   }
+  function openitiPath(path){
+    if(typeof path!=='string'||path.length>500)throw Error('مسار OpenITI غير صالح');
+    const p=path.split('/');if(p.length!==4||p[0]!=='data'||p.slice(1).some(x=>!(/^[A-Za-z0-9_.-]+$/.test(x))||x==='.'||x==='..'))throw Error('مسار OpenITI غير صالح');return path;
+  }
+  async function readOpeniti(path){
+    path=openitiPath(path);const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),90000),limit=16*1024*1024;let bytes=0,chunks=[];
+    try{
+      const r=await fetch('https://raw.githubusercontent.com/OpenITI/RELEASE/'+openitiRevision+'/'+path,{signal:controller.signal,credentials:'omit'});
+      if(!r.ok)throw Error('النص غير متاح (HTTP '+r.status+')');
+      if(Number(r.headers.get('Content-Length')||0)>limit)throw Error('النص أكبر من 16 ميجابايت؛ افتحه على موقع OpenITI');
+      if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.length;if(bytes>limit){await reader.cancel();throw Error('النص أكبر من 16 ميجابايت؛ افتحه على موقع OpenITI')}chunks.push(part.value)}}finally{reader.releaseLock()}}
+      else{const part=new Uint8Array(await r.arrayBuffer());bytes=part.length;if(bytes>limit)throw Error('النص أكبر من 16 ميجابايت؛ افتحه على موقع OpenITI');chunks=[part]}
+      const all=new Uint8Array(bytes);let offset=0;for(const part of chunks){all.set(part,offset);offset+=part.length}
+      let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(all)}catch{throw Error('تعذر قراءة ترميز نص OpenITI')}
+      if(!text.startsWith('######OpenITI#'))throw Error('لم يرجع الموقع نص OpenITI متاحًا بصيغته المتوقعة');
+      return {text,url:'https://github.com/OpenITI/RELEASE/blob/'+openitiRevision+'/'+path,warning:'نص OpenITI خام وقد يحتوي أخطاء أو وسومًا؛ لا يثبت موافقة أصحاب الحقوق. الإصدار CC BY-NC-SA 4.0 يقيد الاستخدام التجاري؛ راجع حقوق النص والطبعة وطابق الاقتباس مع الأصل.'};
+    }catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة تنزيل نص OpenITI');if(e instanceof TypeError)throw Error('تعذر الاتصال بـ GitHub لتنزيل النص');throw e}finally{clearTimeout(timer)}
+  }
   async function searchOpeniti(q){
     q=queryText(q);const needle=normalize(q),terms=needle.split(/\s+/).filter(Boolean);if(!terms.length)throw Error('عبارة البحث غير صالحة');
     const lines=(await openitiIndex()).split(/\r?\n/),headers=(lines.shift()||'').replace(/^\uFEFF/,'').split('\t');
@@ -266,7 +284,7 @@ window.SANAD_BROWSER = true;
     if(typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))throw Error('معرّف الملف غير صالح');
     if(typeof query!=='string'||trim(query).length<2||query.length>200||!normalize(query).trim())throw Error('أدخل عبارة بحث من حرفين إلى 200 حرف');
     const bytes=await documentStore('readonly',id);if(!bytes)throw Error('الملف غير موجود في هذا المتصفح؛ أضفه مجددًا');
-    const needle=normalize(query.trim()),matches=[],head=new TextDecoder().decode(bytes.slice(0,1024));let scanned=0,total=1;
+    const needle=normalize(query.trim()),matches=[],head=new TextDecoder().decode(bytes.slice(0,1024));let scanned=0,total=1,fileWarningForSearch=fileWarning;
     if(head.includes('%PDF-')) {
       try {
         if(!Promise.withResolvers)Promise.withResolvers=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
@@ -278,9 +296,19 @@ window.SANAD_BROWSER = true;
       } catch(e) {if(e?.name==='PasswordException')throw Error('هذا الملف محمي أو مشفر؛ لا يتجاوز سَنَد الحماية. أضف نسخة مسموحة قابلة للقراءة.');throw Error('تعذر قراءة PDF؛ قد يكون تالفًا أو لا يدعمه المتصفح.');}
     } else {
       let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}catch{throw Error('تعذر قراءة الملف النصي')};scanned=1;
-      for(const [i,line] of text.split(/\r?\n/).entries()){if(normalize(line).includes(needle))matches.push({location:`السطر ${i+1}`,text:excerpt(line,needle)});if(matches.length>=MAX_MATCHES)break;}
+      const isOpeniti=text.startsWith('######OpenITI#');let carry=[];
+      for(const [i,line] of text.split(/\r?\n/).entries()){
+        if(isOpeniti){
+          if(!line.trim()||line.startsWith('# ')||line.startsWith('### '))carry=[];
+          const cleaned=line.replace(/^~~\s?/,''),previous=carry.map(x=>x.text).join(' '),joined=(previous?previous+' ':'')+cleaned,previousLength=normalize(previous).length,pos=normalize(joined).indexOf(needle,Math.max(0,previousLength-needle.length+1));
+          if(pos>=0&&pos+needle.length>previousLength){const first=normalize(cleaned).includes(needle)?i+1:(carry[0]?.line||i+1),location=first===i+1?`السطر ${i+1}`:`الأسطر ${first}–${i+1}`;matches.push({location:location+' (نص OpenITI الخام، ليس رقم صفحة)',text:excerpt(joined,needle)});}
+          carry.push({line:i+1,text:cleaned.slice(-400)});carry=carry.slice(-6);while(carry.reduce((n,x)=>n+x.text.length,0)>800&&carry.length>1)carry.shift();
+        }else if(normalize(line).includes(needle))matches.push({location:`السطر ${i+1}`,text:excerpt(line,needle)});
+        if(matches.length>=MAX_MATCHES)break;
+      }
+      if(isOpeniti)fileWarningForSearch='نص OpenITI الخام قد يحتوي وسومًا وأخطاء؛ الأسطر ليست صفحات الطبعة. طابق المقتطف مع الأصل وراجع الحقوق.';
     }
-    return {matches,scanned,total,partial:scanned<total||matches.length>=MAX_MATCHES,warning:fileWarning};
+    return {matches,scanned,total,partial:scanned<total||matches.length>=MAX_MATCHES,warning:fileWarningForSearch};
   }
   window.browserEngine = async (path,data={}) => {
     if(path==='/api/projects')return {projects:projects()};
@@ -288,6 +316,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
     if(path==='/api/topics')return topics();
     if(path==='/api/wikisource/read')return readWikisource(data.page_id);
+    if(path==='/api/openiti/read')return readOpeniti(data.path);
     if(path==='/api/openiti/search')return searchOpeniti(data.query);
     if(path==='/api/research')return research(data.query,data.provider);
     if(path==='/api/crossref')return {results:await crossref(data.query)};

@@ -1,4 +1,8 @@
 import unittest
+import io
+import tempfile
+import base64
+from sanad import library
 from unittest import mock
 from sanad import openiti, app
 
@@ -24,6 +28,25 @@ class OpenitiTest(unittest.TestCase):
         result=openiti.search_index('الطبري',HEADER+ROW*30)
         self.assertEqual(result['total'],30)
         self.assertEqual(len(result['results']),25)
+    def test_read_selected_text_and_reject_unsafe_path(self):
+        path='data/0310Tabari/0310Tabari.Tarikh/0310Tabari.Tarikh.X-ara1'
+        content='######OpenITI#\n\n# نص في دفتر\n~~كان كثيرا ما ينظر\n'.encode()
+        with mock.patch('urllib.request.urlopen', return_value=io.BytesIO(content)) as fetch:
+            result=openiti.read_text(path)
+            self.assertTrue(result['text'].startswith('######OpenITI#'))
+            self.assertIn(openiti.REVISION,result['url'])
+            self.assertIn('raw.githubusercontent.com',fetch.call_args.args[0].full_url)
+        for bad in ['https://evil.example/a','data/../x/y','data/a/b/..','data/a/b/x%2fy','data/a/b/x?query']:
+            with self.assertRaises(ValueError): openiti.read_text(bad)
+        with mock.patch('urllib.request.urlopen',return_value=io.BytesIO(b'<html>error</html>')):
+            with self.assertRaises(ValueError): openiti.read_text(path)
+        with tempfile.TemporaryDirectory() as folder:
+            doc=library.import_document(folder,'book.txt',base64.b64encode(content).decode())
+            result=library.search_document(folder,doc['id'],'دفتر كان كثيرا')
+            self.assertEqual(len(result['matches']),1)
+            self.assertIn('ليس رقم صفحة',result['matches'][0]['location'])
+            self.assertIn('دفتر كان كثيرا',result['matches'][0]['text'])
+
     def test_retry_only_requested_provider(self):
         with mock.patch('sanad.app.catalogs.doaj',return_value=[{'title':'x'}]) as source, \
              mock.patch('sanad.app.catalogs.openalex') as other:

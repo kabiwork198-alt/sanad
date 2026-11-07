@@ -81,3 +81,35 @@ def search(query):
     if not isinstance(query, str) or not query.strip() or len(query)>300 or not normalize(query).strip():
         raise ValueError('أدخل عبارة بحث لا تتجاوز 300 حرف')
     return search_index(query, fetch_index())
+
+
+MAX_TEXT_BYTES = 16 * 1024 * 1024
+TEXT_WARNING = ('نص OpenITI خام وقد يحتوي أخطاء أو وسومًا؛ لا يثبت موافقة أصحاب الحقوق. '
+                'الإصدار CC BY-NC-SA 4.0 يقيد الاستخدام التجاري؛ راجع حقوق النص والطبعة وطابق الاقتباس مع الأصل.')
+
+
+def validate_path(path):
+    if not isinstance(path, str) or len(path) > 500:
+        raise ValueError('مسار OpenITI غير صالح')
+    parts = path.split('/')
+    if len(parts) != 4 or parts[0] != 'data' or any(not re.fullmatch(r'[A-Za-z0-9_.-]+', x) or x in ('.', '..') for x in parts[1:]):
+        raise ValueError('مسار OpenITI غير صالح')
+    return path
+
+
+def read_text(path):
+    """Fetch a single explicitly selected, pinned public text; never arbitrary URLs."""
+    path = validate_path(path)
+    url = 'https://raw.githubusercontent.com/OpenITI/RELEASE/' + REVISION + '/' + path
+    req = urllib.request.Request(url, headers={'User-Agent':'SanadStudio/0.1 (local research tool)', 'Accept':'text/plain'})
+    with urllib.request.urlopen(req, timeout=90) as response:
+        raw = response.read(MAX_TEXT_BYTES + 1)
+    if len(raw) > MAX_TEXT_BYTES:
+        raise ValueError('النص أكبر من 16 ميجابايت؛ افتحه على موقع OpenITI أو أضف ملفًا مسموحًا أصغر')
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError as exc:
+        raise ValueError('تعذر قراءة ترميز نص OpenITI') from exc
+    if not text.startswith('######OpenITI#'):
+        raise ValueError('لم يرجع الموقع نص OpenITI متاحًا بصيغته المتوقعة')
+    return {'text':text, 'url':ROOT+path, 'warning':TEXT_WARNING}

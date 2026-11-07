@@ -125,6 +125,11 @@ class SanadTest(unittest.TestCase):
             self.assertEqual(draft['included'], 1)
         req = urllib.request.Request(base+'/api/analyze', data=json.dumps({'project':payload}).encode(), headers={'X-Sanad-Token':app.TOKEN,'Content-Type':'application/json','Origin':base})
         with urllib.request.urlopen(req) as r: self.assertIn('لا يثبت صحة', json.load(r)['warning'])
+        path = 'data/a/b/c'
+        req = urllib.request.Request(base+'/api/openiti/read', data=json.dumps({'path':path}).encode(), headers={'X-Sanad-Token':app.TOKEN,'Content-Type':'application/json','Origin':base})
+        with mock.patch('sanad.app.openiti.read_text', return_value={'text':'######OpenITI#\nنص','url':'https://github.com/OpenITI/RELEASE','warning':'راجع الحقوق'}) as fetch:
+            with urllib.request.urlopen(req) as r: self.assertIn('نص', json.load(r)['text'])
+            fetch.assert_called_once_with(path)
         req = urllib.request.Request(base+'/api/save', data=b'{}', headers={'X-Sanad-Token':app.TOKEN,'Origin':'http://evil.example'})
         with self.assertRaises(urllib.error.HTTPError) as cm: urllib.request.urlopen(req)
         self.assertEqual(cm.exception.code,403)

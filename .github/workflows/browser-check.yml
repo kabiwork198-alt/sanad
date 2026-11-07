@@ -19,7 +19,7 @@ jobs:
       - run: node tests/test_browser_engine.cjs
   live-service-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,7 +33,7 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_wikisource.cjs
       - name: Test manual source workflow and responsive navigation
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_manual.cjs
-      - name: Test optional OpenITI and individual source retries
+      - name: Test OpenITI text import, searching and individual source retries
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_sources.cjs
       - name: Check mobile browser against live public services
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/live_browser.cjs
