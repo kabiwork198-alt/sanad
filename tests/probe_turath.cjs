@@ -1,5 +1,5 @@
 // Small read-only diagnostic of the Turath service advertised by its maintainers.
-const base='https://mcp.turath.io/mcp',notice=s=>console.log('::notice file=tests/probe_turath.cjs,line=1::'+String(s).replaceAll('%','%25').replaceAll('\n','%0A').slice(0,15000));
+const base='https://mcp.turath.io/mcp/',notice=s=>console.log('::notice file=tests/probe_turath.cjs,line=1::'+String(s).replaceAll('%','%25').replaceAll('\n','%0A').slice(0,15000));
 (async()=>{
  let session='';
  async function rpc(method,params,id){
