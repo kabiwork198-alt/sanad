@@ -442,18 +442,18 @@ window.SANAD_BROWSER = true;
         if(!Promise.withResolvers)Promise.withResolvers=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
         const pdf=await import('./vendor/pdf.min.mjs');
         pdf.GlobalWorkerOptions.workerSrc=new URL('web/vendor/pdf.worker.min.mjs',document.baseURI).href;
-        const task=pdf.getDocument({data:bytes.slice()});const doc=await task.promise;total=doc.numPages;
+        const task=pdf.getDocument({data:bytes.slice(),isEvalSupported:false});const doc=await task.promise;total=doc.numPages;
         for(let i=1;i<=Math.min(total,MAX_PAGES);i++){const page=await doc.getPage(i);const content=await page.getTextContent();scanned++;const line=content.items.map(x=>x.str||'').join(' ');if(normalize(line).includes(needle))matches.push({location:`صفحة PDF ${i}`,text:excerpt(line,needle)});if(matches.length>=MAX_MATCHES)break;}
         await doc.destroy();
       } catch(e) {if(e?.name==='PasswordException')throw Error('هذا الملف محمي أو مشفر؛ لا يتجاوز سَنَد الحماية. أضف نسخة مسموحة قابلة للقراءة.');throw Error('تعذر قراءة PDF؛ قد يكون تالفًا أو لا يدعمه المتصفح.');}
     } else {
       let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}catch{throw Error('تعذر قراءة الملف النصي')};scanned=1;
-      const isOpeniti=text.startsWith('######OpenITI#'),isMineru=text.startsWith('#SANAD-MINERU-TEXT-1\n');let carry=[],mineruPage=null;
+      const isOpeniti=text.startsWith('######OpenITI#'),isMineru=text.startsWith('#SANAD-MINERU-TEXT-1\n'),isBatchOcr=text.startsWith('#SANAD-OCR-TEXT-1\n');let carry=[],paginatedPage=null;
       for(const [i,line] of text.split(/\r?\n/).entries()){
-        if(isMineru){
+        if(isMineru||isBatchOcr){
           const marker=/^#SANAD-PAGE:([1-9][0-9]{0,6})$/.exec(line);
-          if(marker){mineruPage=Number(marker[1]);continue}
-          if(mineruPage!==null&&line.startsWith('| ')&&normalize(line.slice(2)).includes(needle))matches.push({location:`صفحة PDF ${mineruPage} بحسب MinerU؛ طابقها بالأصل`,text:excerpt(line.slice(2),needle)});
+          if(marker){paginatedPage=Number(marker[1]);continue}
+          if(paginatedPage!==null&&line.startsWith('| ')&&normalize(line.slice(2)).includes(needle))matches.push({location:`صفحة PDF ${paginatedPage} بحسب ${isMineru?'MinerU':'OCR المحلي'}؛ طابقها بالأصل`,text:excerpt(line.slice(2),needle)});
         }else if(isOpeniti){
           if(!line.trim()||line.startsWith('# ')||line.startsWith('### '))carry=[];
           const cleaned=line.replace(/^~~\s?/,''),previous=carry.map(x=>x.text).join(' '),joined=(previous?previous+' ':'')+cleaned,previousLength=normalize(previous).length,pos=normalize(joined).indexOf(needle,Math.max(0,previousLength-needle.length+1));
@@ -462,6 +462,7 @@ window.SANAD_BROWSER = true;
         }else if(normalize(line).includes(needle))matches.push({location:`السطر ${i+1}`,text:excerpt(line,needle)});
         if(matches.length>=MAX_MATCHES)break;
       }
+      if(isBatchOcr)fileWarningForSearch='نص OCR المحلي تقريبي وقد يتضمن صفحات فارغة أو أخطاء؛ طابق المقتطف ورقم الصفحة مع الأصل والطبعة.';
       if(isMineru)fileWarningForSearch='نتيجة MinerU مستوردة وقد تحذف عناصر أو تخطئ في ترتيب العربية وقراءة الصفحات. رقم الصفحة من ملف النتيجة؛ طابقه مع الأصل والطبعة.';
       if(isOpeniti)fileWarningForSearch='نص OpenITI الخام قد يحتوي وسومًا وأخطاء؛ الأسطر ليست صفحات الطبعة. طابق المقتطف مع الأصل وراجع الحقوق.';
     }

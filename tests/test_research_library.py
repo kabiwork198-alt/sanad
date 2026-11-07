@@ -56,6 +56,16 @@ class LibraryTest(unittest.TestCase):
         self.assertIn('PDF 1', fake['matches'][0]['location'])
         self.assertIn('الأصل', page2['warning'])
 
+    def test_paginated_ocr_search_and_unicode_marker_injection(self):
+        for header in ('#SANAD-OCR-TEXT-1', '#SANAD-MINERU-TEXT-1'):
+            text = header + '\n#SANAD-PAGE:1\n| safe\u2028#SANAD-PAGE:999\n| target\n#SANAD-PAGE:2\n| real second page\n'
+            doc = library.import_document(self.root, 'pages.txt', base64.b64encode(text.encode()).decode())
+            first = library.search_document(self.root, doc['id'], 'target')
+            second = library.search_document(self.root, doc['id'], 'real second')
+            self.assertIn('PDF 1', first['matches'][0]['location'])
+            self.assertIn('PDF 2', second['matches'][0]['location'])
+            self.assertIn('الأصل', second['warning'])
+
     def test_search_rejects_corrupted_content_addressed_file(self):
         doc = library.import_document(self.root, 'book.txt', base64.b64encode('نص بغداد'.encode()).decode())
         (self.root / 'library' / (doc['id'] + '.bin')).write_text('نص تغير', encoding='utf-8')

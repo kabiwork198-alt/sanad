@@ -142,16 +142,19 @@ def search_document(data_dir, ident, query):
         scanned = 1
         is_openiti = text.startswith('######OpenITI#')
         is_mineru = text.startswith('#SANAD-MINERU-TEXT-1\n')
-        mineru_page = None
+        is_batch_ocr = text.startswith('#SANAD-OCR-TEXT-1\n')
+        paginated_page = None
         carry = []
-        for number, line in enumerate(text.splitlines(), 1):
-            if is_mineru:
+        lines = text.split('\n') if (is_mineru or is_batch_ocr) else text.splitlines()
+        for number, line in enumerate(lines, 1):
+            if is_mineru or is_batch_ocr:
                 marker = re.fullmatch(r'#SANAD-PAGE:([1-9][0-9]{0,6})', line)
                 if marker:
-                    mineru_page = int(marker.group(1))
+                    paginated_page = int(marker.group(1))
                     continue
-                if mineru_page is not None and line.startswith('| ') and needle in normalize(line[2:]):
-                    matches.append({'location': f'صفحة PDF {mineru_page} بحسب MinerU؛ طابقها بالأصل', 'text': excerpt(line[2:], needle)})
+                if paginated_page is not None and line.startswith('| ') and needle in normalize(line[2:]):
+                    engine = 'MinerU' if is_mineru else 'OCR المحلي'
+                    matches.append({'location': f'صفحة PDF {paginated_page} بحسب {engine}؛ طابقها بالأصل', 'text': excerpt(line[2:], needle)})
             elif is_openiti:
                 if not line.strip() or line.startswith('# ' ) or line.startswith('### '):
                     carry = []
@@ -173,6 +176,8 @@ def search_document(data_dir, ident, query):
             if len(matches) >= MAX_MATCHES:
                 break
     warning = 'النص مستخرج آليًا وقد يتضمن أخطاء. طابقه مع النسخة الأصلية. لا يُقرأ النص من الصور الممسوحة ضوئيًا دون OCR.'
+    if not pdf and is_batch_ocr:
+        warning = 'نص OCR المحلي تقريبي وقد يتضمن صفحات فارغة أو أخطاء؛ طابق المقتطف ورقم الصفحة مع الأصل والطبعة.'
     if not pdf and is_mineru:
         warning = 'نتيجة MinerU مستوردة وقد تحذف عناصر أو تخطئ في ترتيب العربية وقراءة الصفحات. رقم الصفحة من ملف النتيجة؛ طابقه مع الأصل والطبعة.'
     if not pdf and is_openiti:

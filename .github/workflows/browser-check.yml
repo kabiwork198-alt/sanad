@@ -51,6 +51,8 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_ocr_pages.cjs
       - name: Diagnose OCR on a historic public-domain Arabic scan
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_ocr_scan.py
+      - name: Test offline multipage Arabic and English PDF OCR
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_ocr_batch.py
       - name: Test MinerU result import in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_mineru.py
       - name: Test complete backup interoperability
