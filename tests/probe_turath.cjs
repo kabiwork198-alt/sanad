@@ -1,5 +1,6 @@
 // Small read-only diagnostic of the Turath service advertised by its maintainers.
 const base='https://mcp.turath.io/mcp/',notice=s=>console.log('::notice file=tests/probe_turath.cjs,line=1::'+String(s).replaceAll('%','%25').replaceAll('\n','%0A').slice(0,15000));
+function shape(v,depth=0){if(depth>5)return '[depth]';if(Array.isArray(v))return {arrayLength:v.length,first:v.length?shape(v[0],depth+1):null};if(v&&typeof v==='object')return Object.fromEntries(Object.entries(v).slice(0,40).map(([k,x])=>[k,typeof x==='string'&&!/^(?:title|name|url|id|book_id|page_id)$/i.test(k)?'[string '+x.length+']':shape(x,depth+1)]));return v}
 (async()=>{
  let session='';
  async function rpc(method,params,id){
@@ -20,6 +21,6 @@ const base='https://mcp.turath.io/mcp/',notice=s=>console.log('::notice file=tes
   const result=await rpc('tools/call',{name:'search_turath',arguments:{q:'فتح بغداد',page:1}},3);
   let content=result.data?.result?.content||[];let parsed;
   try{parsed=JSON.parse(content.find(x=>x.type==='text')?.text)}catch{}
-  notice('Turath search raw structure '+JSON.stringify({status:result.status,isError:result.data?.result?.isError,keys:Object.keys(parsed||{}),contentTypes:content.map(x=>x.type),structuredKeys:Object.keys(result.data?.result?.structuredContent||{}),first:JSON.stringify(parsed).slice(0,2500)}));
+  notice('Turath search raw structure '+JSON.stringify({status:result.status,isError:result.data?.result?.isError,keys:Object.keys(parsed||{}),contentTypes:content.map(x=>x.type),structuredKeys:Object.keys(result.data?.result?.structuredContent||{}),shape:shape(parsed)}));
  }catch(e){notice('Turath unavailable: '+e.name+': '+e.message)}
 })();
