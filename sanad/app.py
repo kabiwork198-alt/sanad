@@ -15,6 +15,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 
 from sanad import library, workflow
@@ -99,12 +100,12 @@ def validate_project(project):
 
 def save_project(project):
     encoded = validate_project(project)
-    with connect() as db:
+    with closing(connect()) as db, db:
         db.execute('INSERT INTO projects (id,title,updated,data) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,updated=excluded.updated,data=excluded.data', (project['id'], project['title'].strip(), int(time.time()), encoded))
 
 
 def all_projects():
-    with connect() as db:
+    with closing(connect()) as db, db:
         return [json.loads(row[0]) for row in db.execute('SELECT data FROM projects ORDER BY updated DESC, rowid DESC')]
 
 
@@ -286,7 +287,7 @@ class Handler(BaseHTTPRequestHandler):
                 ident = body.get('id', '')
                 if not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{32}', ident):
                     raise ValueError('معرّف غير صالح')
-                with connect() as db:
+                with closing(connect()) as db, db:
                     db.execute('DELETE FROM projects WHERE id=?', (ident,))
                 return self.send(200, {'ok': True})
             if path in ('/api/suggestions', '/api/analyze', '/api/draft', '/api/prepare-prompt'):

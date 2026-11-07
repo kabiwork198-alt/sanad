@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -51,6 +52,18 @@ class SanadTest(unittest.TestCase):
         app.save_project(p)
         self.assertEqual(len(app.all_projects()), 1)
         self.assertEqual(app.all_projects()[0]['title'], 'تعديل')
+
+    def test_database_connections_are_closed_after_use(self):
+        db = app.connect()
+        with mock.patch('sanad.app.connect', return_value=db):
+            app.save_project(project())
+        with self.assertRaises(sqlite3.ProgrammingError):
+            db.execute('SELECT 1')
+        db = app.connect()
+        with mock.patch('sanad.app.connect', return_value=db):
+            app.all_projects()
+        with self.assertRaises(sqlite3.ProgrammingError):
+            db.execute('SELECT 1')
 
     def test_verified_claim_needs_existing_source_and_location(self):
         p = project()
