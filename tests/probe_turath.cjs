@@ -17,7 +17,7 @@ function shape(v,depth=0){if(depth>5)return '[depth]';if(Array.isArray(v))return
   const init=await rpc('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'sanad-diagnostic',version:'1.0'}},1);notice('Turath init '+JSON.stringify(init));if(!init.data?.result)return;
   const ack=await rpc('notifications/initialized',{},undefined);notice('Turath initialized HTTP '+ack.status);
   const list=await rpc('tools/list',{},2);notice('Turath tools status '+list.status);
-  for(const t of list.data?.result?.tools||[])notice('Turath tool '+JSON.stringify({name:t.name,description:t.description,inputSchema:t.inputSchema}));
+  notice('Turath tool names '+JSON.stringify((list.data?.result?.tools||[]).map(t=>t.name)));
   const result=await rpc('tools/call',{name:'search_turath',arguments:{q:'فتح بغداد',page:1}},3);
   let content=result.data?.result?.content||[];let parsed;
   try{parsed=JSON.parse(content.find(x=>x.type==='text')?.text)}catch{}
