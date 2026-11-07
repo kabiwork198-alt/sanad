@@ -207,10 +207,13 @@ async function persistOcrProject(projectId){
   if(dirtyVersion===revision){dirty=false;$('#save-state').textContent='محفوظ';$('#save-state').dataset.dirty='false'}
  }finally{saveInFlight=false;$('#save').disabled=false}
 }
+function ocrPagesBody(pages){return '#SANAD-OCR-TEXT-1\n'+pages.map(p=>`#SANAD-PAGE:${p.number}\n${p.text.split('\n').map(line=>'| '+line).join('\n')}`).join('\n')+'\n'}
+async function ocrPagesHash(pages){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ocrPagesBody(pages)))),b=>b.toString(16).padStart(2,'0')).join('')}
 function validateOcrRecovery(saved,projectId){
  const {job,pages}=saved||{};
  if(!job||job.projectId!==projectId||!Array.isArray(pages)||!Array.isArray(job.failed)||
   !/^[a-f0-9]{32}$/.test(job.sourceId||'')||!/^[a-f0-9]{64}$/.test(job.originalFileId||'')||typeof job.publishedFileId!=='string'||(job.publishedFileId&&!/^[a-f0-9]{64}$/.test(job.publishedFileId))||
+  (job.pendingFileId!==undefined&&(typeof job.pendingFileId!=='string'||(job.pendingFileId&&!/^[a-f0-9]{64}$/.test(job.pendingFileId))))||
   !['ara','eng','ara+eng'].includes(job.language)||!Number.isInteger(job.first)||!Number.isInteger(job.last)||
   job.first<1||job.last<job.first||job.last>9999||job.last-job.first+1>300||
   !Number.isInteger(job.next)||job.next<job.first||job.next>job.last+1||!Number.isInteger(job.total)||job.total<job.last||
@@ -262,15 +265,24 @@ async function runOcrBatch({file,language,first,last,title,url,projectId,resume}
    if(current?.id!==projectId)throw Error('تغير المشروع؛ بقي تقدم OCR محفوظًا محليًا');
    if(!item.pages.some(page=>page.text))throw Error('لم يُستخرج نص؛ بقي التقدم والأصل محليًا للمراجعة أو الحذف');
    let target=current.sources.find(s=>s.id===job.sourceId);
-   if(target&&(target.originalFileId!==job.originalFileId||(job.publishedFileId&&target.fileId!==job.publishedFileId)))throw Error('تغير ربط المصدر منذ التوقف؛ بقي تقدم OCR محفوظًا ولم يُستبدل الملف');
+   // Accept only the last committed attachment, an explicitly staged attachment,
+   // or (for older checkpoints) the exact text represented by the saved pages.
+   const allowedFiles=new Set([job.publishedFileId,job.pendingFileId].filter(Boolean));
+   if(saved?.pages.length)allowedFiles.add(await ocrPagesHash(saved.pages));
+   if(target&&(target.originalFileId!==job.originalFileId||!allowedFiles.has(target.fileId)))throw Error('تغير ربط المصدر منذ التوقف؛ بقي تقدم OCR محفوظًا ولم يُستبدل الملف');
    if(!target&&job.publishedFileId)throw Error('أُزيل مصدر المهمة بعد التوقف؛ لم يُنشأ مجددًا. احذف التقدم أو أعد المصدر أولًا');
    if(!target&&current.sources.length>=500)throw Error('بلغت حد 500 مصدر للمشروع؛ بقي التقدم محفوظًا');
-   const body='#SANAD-OCR-TEXT-1\n'+item.pages.map(p=>`#SANAD-PAGE:${p.number}\n${p.text.split('\n').map(line=>'| '+line).join('\n')}`).join('\n')+'\n';
+   const body=ocrPagesBody(item.pages);
    const previousFileId=target?.fileId;
    const doc=(await api('/api/library/import',{name:'local-ocr-pages.txt',content:bytesToBase64(new TextEncoder().encode(body))})).document;
    if(current?.id!==projectId)throw Error('تغير المشروع؛ بقي تقدم OCR محفوظًا');
    if(target&&(!current.sources.includes(target)||target.originalFileId!==job.originalFileId||target.fileId!==previousFileId))throw Error('تغير المصدر أو الملف أثناء الحفظ؛ بقي التقدم محفوظًا ولم يُستبدل الربط');
    if(!target&&current.sources.length>=500)throw Error('بلغت حد 500 مصدر؛ بقي التقدم محفوظًا');
+   // Durable intent before updating the project, so either side of a crash can be resumed.
+   job={...job,pendingFileId:doc.id};await SanadOcrJournal.save(job);
+   if(current?.id!==projectId)throw Error('تغير المشروع؛ بقي تقدم OCR محفوظًا');
+   if(target&&(!current.sources.includes(target)||target.originalFileId!==job.originalFileId||target.fileId!==previousFileId))throw Error('تغير المصدر أو الملف أثناء الحفظ؛ بقي التقدم محفوظًا ولم يُستبدل الربط');
+   if(!target&&(current.sources.length>=500||current.sources.some(s=>s.id===job.sourceId)))throw Error('تغيرت المصادر أثناء الحفظ؛ بقي تقدم OCR محفوظًا');
    const blank=item.pages.filter(p=>!p.text).map(p=>p.number),completed=item.pages.map(p=>p.number);
    const info=`OCR محلي Tesseract.js 6.0.1؛ اللغة: ${language}\nالملف الأصلي: ${job.filename}؛ SHA-256: ${item.sha}؛ عدد صفحات PDF: ${item.total}\nالنطاق المطلوب: ${first}–${last}؛ الصفحات المعالجة: ${completed.join(', ')||'لا توجد'}؛ صفحات بلا نص: ${blank.join(', ')||'لا توجد'}؛ صفحات تعذر فحصها: ${item.failed.join(', ')||'لا توجد'}\n${item.stopped?'نتيجة جزئية: '+item.reason:'انتهت محاولة جميع الصفحات المطلوبة؛ لا يعني ذلك دقة النص أو قراءته كاملًا.'}\nتاريخ الاستخراج: ${new Date().toISOString()}\nالأصل محفوظ ومرتبط محليًا؛ النص آلي وقد يخطئ. طابقه مع الصفحة والطبعة وراجع الحقوق.`;
    if(target){
@@ -282,7 +294,7 @@ async function runOcrBatch({file,language,first,last,title,url,projectId,resume}
    }
    setDirty();fileMatches=null;
    await persistOcrProject(projectId);
-   if(item.stopped){job={...job,publishedFileId:doc.id};await SanadOcrJournal.save(job)}
+   if(item.stopped){job={...job,publishedFileId:doc.id,pendingFileId:''};await SanadOcrJournal.save(job)}
    else await SanadOcrJournal.remove(projectId);
    return `حُفظت ${item.pages.length} صفحة (${blank.length} بلا نص، ${item.failed.length} تعذر فحصها)${item.stopped?'؛ يمكن استئناف المهمة':''}؛ راجع الأصل`;
   });
@@ -361,6 +373,8 @@ $('#delete').onclick=async()=>{
 // A bounded, portable backup of saved projects and their linked files. No network providers are used.
 const BACKUP_TOTAL=64*1024*1024, BACKUP_MAX_FILE=100*1024*1024;
 let backupBusy=false;
+// Avoid nested repeating groups: they can exhaust the JS regexp stack on large files.
+function validBase64Shape(value,max){return typeof value==='string'&&value.length<=max&&value.length%4===0&&!/[^A-Za-z0-9+/=]/.test(value)}
 function backupReferences(items){
  const ids=new Set();
  for(const p of items){if(!p||!Array.isArray(p.sources||[]))throw Error('مصادر المشروع غير صالحة');for(const s of (p.sources||[])){for(const id of [s.fileId,s.originalFileId])if(id){if(!/^[a-f0-9]{64}$/.test(id))throw Error('معرّف ملف مرتبط غير صالح');ids.add(id)}}}
@@ -382,7 +396,7 @@ async function validateBackupFiles(obj){
  const ids=backupReferences(obj.projects);if(!Array.isArray(obj.files)||obj.files.length!==ids.size)throw Error('النسخة لا تحتوي جميع الملفات المرتبطة');
  const found=new Set();let total=0;
  for(const file of obj.files){
-  if(!file||typeof file.id!=='string'||!ids.has(file.id)||found.has(file.id)||typeof file.name!=='string'||!/^([a-f0-9]{64})\.(txt|pdf)$/.test(file.name)||!file.name.startsWith(file.id+'.')||!Number.isSafeInteger(file.size)||file.size<1||file.size>20*1024*1024||typeof file.content!=='string'||file.content.length>20*1024*1024*4/3+16||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.content))throw Error('بيانات ملف في النسخة غير صالحة');
+  if(!file||typeof file.id!=='string'||!ids.has(file.id)||found.has(file.id)||typeof file.name!=='string'||!/^([a-f0-9]{64})\.(txt|pdf)$/.test(file.name)||!file.name.startsWith(file.id+'.')||!Number.isSafeInteger(file.size)||file.size<1||file.size>20*1024*1024||!validBase64Shape(file.content,20*1024*1024*4/3+16))throw Error('بيانات ملف في النسخة غير صالحة');
   total+=file.size;if(total>BACKUP_TOTAL)throw Error('الملفات المرتبطة تتجاوز 64 ميبيبايت');
   let raw;try{raw=atob(file.content)}catch{throw Error('ترميز ملف في النسخة غير صالح')}
   if(raw.length!==file.size||btoa(raw)!==file.content)throw Error('حجم الملف أو ترميزه لا يطابق النسخة');
@@ -427,8 +441,8 @@ async function backupKey(password,salt,usage){
  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:BACKUP_KDF_ROUNDS,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,[usage]);
 }
 function backupDecodeBase64(text,expectedLength,maxLength){
- if(typeof text!=='string'||text.length>maxLength||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text))throw Error('صيغة النسخة المشفّرة غير صالحة');
- const binary=atob(text);if((expectedLength!==null&&binary.length!==expectedLength)||btoa(binary)!==text)throw Error('صيغة النسخة المشفّرة غير صالحة');
+ if(!validBase64Shape(text,maxLength))throw Error('صيغة النسخة المشفّرة غير صالحة');
+ let binary;try{binary=atob(text)}catch{throw Error('صيغة النسخة المشفّرة غير صالحة')}if((expectedLength!==null&&binary.length!==expectedLength)||btoa(binary)!==text)throw Error('صيغة النسخة المشفّرة غير صالحة');
  return Uint8Array.from(binary,c=>c.charCodeAt(0));
 }
 async function encryptBackup(obj,password){

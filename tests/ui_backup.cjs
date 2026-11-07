@@ -32,6 +32,7 @@ const site='https://kabiwork198-alt.github.io/sanad/';
   let rejected=0;for(const changes of [{iterations:999999999},{cipher:'AES-CBC'},{salt:'not-base64!'},{iv:'AA=='}]){try{await decryptBackup({...envelope,...changes},'عبارة تجريبية طويلة جدا')}catch{rejected++}}
   const sample={text:'ع'.repeat(512*1024)},copy=await decryptBackup(await encryptBackup(sample,'عبارة تجريبية طويلة جدا'),'عبارة تجريبية طويلة جدا');return rejected===4&&copy.text===sample.text;
  },envelope);if(!validation)throw Error('envelope validation or medium-size round trip failed');
+ const malformed=await p.evaluate(()=>['AAAA=AAA','A===','AA=A','AB==','AA A'].every(s=>{try{backupDecodeBase64(s,null,100);return false}catch{return true}}));if(!malformed)throw Error('non-canonical base64 accepted');
  await p.click('#export-all');
  await p.waitForFunction(()=>document.querySelector('#toast').textContent.includes('أُنشئت نسخة'),{timeout:15000});
  const file=path.join(tmp,'sanad-backup-with-files.json');let backup;
@@ -85,7 +86,18 @@ const site='https://kabiwork198-alt.github.io/sanad/';
  const legacy={format:'sanad-backup',version:1,projects:[{id:'c'.repeat(32),title:'قديم',sources:[],claims:[]}]};
  const before=await d.evaluate(async()=>(await api('/api/projects')).projects.length);
  await d.evaluate(b=>restoreBackup(b),legacy);if(await d.evaluate(async()=>(await api('/api/projects')).projects.length)!==before+1)throw Error('legacy import failed');
+ // Exercise an actual encrypted 13 MiB attachment restore and verified export in
+ // both browser storage and the local backend (>16 MiB of base64 used to overflow).
+ for(const target of [p,w]){
+  const passed=await target.evaluate(async()=>{
+   const bytes=new Uint8Array(13*1024*1024);bytes.fill(65);const id=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
+   const project=projectTemplate('ملف تجريبي كبير');project.sources.push({id:uid(),title:'ملف كبير',fileId:id});
+   const backup={format:'sanad-backup',version:2,projects:[project],files:[{id,name:id+'.txt',size:bytes.length,content:bytesToBase64(bytes)}]};
+   const encrypted=await encryptBackup(backup,'عبارة تجريبية طويلة جدا'),decoded=await decryptBackup(encrypted,'عبارة تجريبية طويلة جدا');
+   await restoreBackup(decoded);const doc=(await api('/api/library/export',{id})).document;return doc.id===id&&doc.size===bytes.length;
+  });if(!passed)throw Error('large encrypted backup restore failed');
+ }
  for(const x of [source,win,dest])if(x.errors.length)throw Error(x.errors.join('; '));
- console.log('PASS: encrypted backup UI, wrong password and tampering rejection, encrypted cross-mode restore both ways, full backup UI, integrity rejection, missing-file refusal, browser/Windows round trip, deduplication and legacy import');
+ console.log('PASS: large encrypted restore in both modes, encrypted backup UI, wrong password and tampering rejection, encrypted cross-mode restore both ways, full backup UI, integrity rejection, missing-file refusal, browser/Windows round trip, deduplication and legacy import');
  }finally{if(browser)await browser.close();fs.rmSync(tmp,{recursive:true,force:true})}
 })().catch(e=>{console.error(e);process.exitCode=1});

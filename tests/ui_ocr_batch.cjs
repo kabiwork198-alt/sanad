@@ -35,7 +35,25 @@ const origin=process.env.SANAD_TEST_ORIGIN;if(!origin)throw Error('SANAD_TEST_OR
  const locked=await page.evaluate(async()=>{let release,ready;const held=new Promise(r=>release=r),acquired=new Promise(r=>ready=r);window.testOcrLockRelease=release;window.testOcrLock=navigator.locks.request('sanad-ocr-'+current.id,()=>{ready();return held});await acquired;return current.id});
  const blocked=await peer.evaluate(async id=>{try{await SanadOcrJournal.exclusive(id,()=>Promise.resolve());return false}catch(e){return e.message.includes('نافذة أخرى')}},locked);
  if(!blocked)throw Error('concurrent OCR lock not enforced');await page.evaluate(()=>window.testOcrLockRelease());await page.evaluate(()=>window.testOcrLock);await peer.close();
- await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${savedProject}"]`);await page.click(`[data-project="${savedProject}"]`);await page.click('[data-tab="sources"]');await page.waitForSelector('#ocr-resume');await page.click('#ocr-resume');
+ await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${savedProject}"]`);await page.click(`[data-project="${savedProject}"]`);await page.click('[data-tab="sources"]');await page.waitForSelector('#ocr-resume');
+ // Fail after staging the new file but before saving the project: previous link remains durable.
+ await page.evaluate(()=>{window.originalPersistOcr=persistOcrProject;let calls=0;persistOcrProject=async id=>{if(++calls===2)throw Error('SIMULATED PRE-SAVE CRASH');return window.originalPersistOcr(id)}});
+ await page.click('#ocr-resume');await page.waitForFunction(()=>!ocrBusy&&document.querySelector('#toast').textContent.includes('SIMULATED PRE-SAVE CRASH'),{timeout:90000});
+ const beforeSave=await page.evaluate(async()=>{const state=await SanadOcrJournal.get(current.id),project=(await api('/api/projects')).projects.find(x=>x.id===current.id);return {job:state.job,previous:project.sources[1].fileId}});
+ if(beforeSave.job.pendingFileId===beforeSave.previous||beforeSave.job.publishedFileId!==beforeSave.previous)throw Error('staged-before-save state did not preserve prior attachment');
+ await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${savedProject}"]`);await page.click(`[data-project="${savedProject}"]`);await page.click('[data-tab="sources"]');await page.waitForSelector('#ocr-resume');
+ // Crash/failure after project save but before the completed journal is removed.
+ await page.evaluate(()=>{window.originalRemoveJournal=SanadOcrJournal.remove;SanadOcrJournal.remove=async()=>{throw Error('SIMULATED PUBLICATION CRASH')}});
+ await page.click('#ocr-resume');await page.waitForFunction(()=>!ocrBusy&&document.querySelector('#toast').textContent.includes('SIMULATED PUBLICATION CRASH'),{timeout:90000});
+ const staged=await page.evaluate(async()=>{const saved=await SanadOcrJournal.get(current.id);return {job:saved.job,file:current.sources[1].fileId}});
+ if(staged.job.pendingFileId!==staged.file||staged.job.publishedFileId===staged.file)throw Error('publication intent not persisted before project save');
+ await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${savedProject}"]`);await page.click(`[data-project="${savedProject}"]`);await page.click('[data-tab="sources"]');await page.waitForSelector('#ocr-resume');
+ // A genuine unrelated source edit must not be silently overwritten by recovery.
+ const unrelated=await page.evaluate(async()=>{const doc=(await api('/api/library/import',{name:'changed.txt',content:btoa('user changed this file')})).document;current.sources[1].fileId=doc.id;await api('/api/save',{project:current});return doc.id});
+ await page.click('#ocr-resume');await page.waitForFunction(()=>!ocrBusy&&document.querySelector('#toast').textContent.includes('تغير ربط المصدر'),{timeout:90000});
+ if(await page.evaluate(id=>current.sources[1].fileId!==id,unrelated))throw Error('recovery overwrote unrelated source edit');
+ await page.evaluate(async id=>{current.sources[1].fileId=id;await api('/api/save',{project:current})},staged.file);
+ await page.waitForSelector('#ocr-resume');await page.click('#ocr-resume');
  await page.waitForFunction(()=>!ocrBusy&&current.sources[1]?.notes.includes('الصفحات المعالجة: 1, 2, 3'),{timeout:90000});
  if(await page.evaluate(id=>current.sources.length!==2||current.sources[1].id!==id||current.sources[1].notes.includes('نتيجة جزئية'),partialId))throw Error('resume duplicated or failed to complete source');
  await page.waitForFunction(()=>document.querySelector('#ocr-recovery')?.textContent.includes('لا توجد مهمة'));
@@ -45,12 +63,15 @@ const origin=process.env.SANAD_TEST_ORIGIN;if(!origin)throw Error('SANAD_TEST_OR
  await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${savedProject}"]`);await page.click(`[data-project="${savedProject}"]`);await page.click('[data-tab="sources"]');await page.waitForSelector('#ocr-resume');
  const checkpoint=await page.evaluate(async()=>SanadOcrJournal.get(current.id));if(checkpoint.job.next!==2||checkpoint.pages.length!==1||checkpoint.job.originalFileId!==hash)throw Error('crash checkpoint wrong');
  const rejected=await page.evaluate(async()=>{const saved=await SanadOcrJournal.get(current.id);saved.job.totalBytes++;try{validateOcrRecovery(saved,current.id);return false}catch{return true}});if(!rejected)throw Error('corrupted checkpoint accepted');
- await page.click('#ocr-resume');await page.waitForSelector('[data-local-search="2"]',{timeout:90000});
+ await page.evaluate(()=>{SanadOcrJournal.remove=async()=>{throw Error('SIMULATED LEGACY CRASH')}});await page.click('#ocr-resume');
+ await page.waitForFunction(()=>!ocrBusy&&document.querySelector('#toast').textContent.includes('SIMULATED LEGACY CRASH'),{timeout:90000});
+ await page.evaluate(async()=>{const saved=await SanadOcrJournal.get(current.id);delete saved.job.pendingFileId;await SanadOcrJournal.save(saved.job)});
+ await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${savedProject}"]`);await page.click(`[data-project="${savedProject}"]`);await page.click('[data-tab="sources"]');await page.waitForSelector('#ocr-resume');await page.click('#ocr-resume');await page.waitForFunction(async()=>!ocrBusy&&!(await SanadOcrJournal.get(current.id)),{timeout:90000});
  const recovered=await page.evaluate(()=>current.sources[2]);if(!recovered.notes.includes('الصفحات المعالجة: 1, 2, 3')||recovered.originalFileId!==hash)throw Error('crash recovery not complete');
  const backup=await page.evaluate(async()=>createFullBackup());if(!backup.files.some(f=>f.id===hash)||!backup.files.some(f=>f.id===recovered.fileId))throw Error('backup missing OCR original or text');
 
  // Simulate repeated engine failures after one real recognized page: keep page 1 and record failures.
- await page.evaluate(()=>{const original=Tesseract.createWorker;window.originalOcrWorker=original;Tesseract.createWorker=async(...args)=>{const worker=await original(...args),recognize=worker.recognize.bind(worker);let calls=0;worker.recognize=async(...input)=>{if(++calls>1)throw Error('simulated engine failure');return recognize(...input)};return worker}});
+ await page.evaluate(async()=>{await loadOcr();const original=Tesseract.createWorker;window.originalOcrWorker=original;Tesseract.createWorker=async(...args)=>{const worker=await original(...args),recognize=worker.recognize.bind(worker);let calls=0;worker.recognize=async(...input)=>{if(++calls>1)throw Error('simulated engine failure');return recognize(...input)};return worker}});
  await (await page.$('#ocr-batch-file')).uploadFile(pdf);await page.select('#ocr-batch-language','eng');await page.$eval('#ocr-batch-last',e=>e.value='12');await page.click('#ocr-batch-run');
  await page.waitForSelector('[data-local-search="3"]',{timeout:90000});const failed=await page.evaluate(()=>current.sources[3]);if(!failed.notes.includes('صفحات تعذر فحصها: 2, 3, 4')||!failed.notes.includes('فشل ثلاث صفحات')||!failed.notes.includes('الصفحات المعالجة: 1'))throw Error('failed pages not recorded: '+failed.notes);
  // Discard the failed job, then simulate a storage failure while checkpointing page 2.
@@ -65,5 +86,5 @@ const origin=process.env.SANAD_TEST_ORIGIN;if(!origin)throw Error('SANAD_TEST_OR
 
  await page.click('#save');await page.waitForFunction(()=>!dirty);const id=await page.evaluate(()=>current.id);await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${id}"]`);await page.click(`[data-project="${id}"]`);await page.click('[data-tab="sources"]');await page.type('[data-local-query="0"]','archives');await page.click('[data-local-search="0"]');await page.waitForFunction(()=>document.querySelector('[data-match="0"]')?.parentElement?.textContent.includes('PDF 2'));
  for(const width of [320,390,1440]){await page.setViewport({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)>1)throw Error('overflow '+width)}
- if(external.length||errors.length)throw Error('external: '+external+' errors: '+errors);console.log('PASS: real offline twelve-page PDF OCR, consent, original backup, lock, partial resume, abrupt reload recovery, failed pages and hash');
+ if(external.length||errors.length)throw Error('external: '+external+' errors: '+errors);console.log('PASS: real offline twelve-page PDF OCR, consent, original backup, lock, partial resume, abrupt reload, publication crash, legacy recovery, failed pages and hash');
  }finally{if(browser)await browser.close();fs.rmSync(dir,{recursive:true,force:true})}})().catch(e=>{console.error(e);process.exitCode=1});
