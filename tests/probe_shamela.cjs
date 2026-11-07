@@ -17,9 +17,16 @@ const notice=s=>console.log('::notice file=tests/probe_shamela.cjs,line=1::'+Str
     const pre=await fetch(base,{method:'OPTIONS',headers:{Origin:'https://kabiwork198-alt.github.io','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,accept'},signal:AbortSignal.timeout(15000)});
     notice('Shamela browser preflight HTTP '+pre.status+' ACAO='+pre.headers.get('access-control-allow-origin')+' headers='+pre.headers.get('access-control-allow-headers'));
     const init=await req('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'sanad-diagnostic',version:'1.0'}},1);
-    notice('Shamela init: '+JSON.stringify({status:init.status,data:init.parsed||init.body}));
+    notice('Shamela init: '+JSON.stringify({status:init.status,version:init.parsed?.result?.protocolVersion,server:init.parsed?.result?.serverInfo,error:init.parsed?.error||init.body.slice(0,100)}));
     if(init.status!==200||!init.parsed?.result)return;
     const ack=await req('notifications/initialized',{},undefined);notice('Shamela initialized notification HTTP '+ack.status);
-    const list=await req('tools/list',{},2);notice('Shamela tools list: '+JSON.stringify({status:list.status,data:list.parsed||list.body}));
+    const list=await req('tools/list',{},2);
+    for(const tool of list.parsed?.result?.tools||[]){
+      const props=tool.inputSchema?.properties||{},schema={name:tool.name,required:tool.inputSchema?.required||[],fields:Object.fromEntries(Object.entries(props).map(([k,v])=>[k,{type:v.type,enum:v.enum,items:v.items?.type,default:v.default}]))};
+      notice('Shamela tool schema: '+JSON.stringify(schema));
+    }
+    const tool=(list.parsed?.result?.tools||[]).find(x=>x.name==='shamela_find');
+    if(tool){const out=await req('tools/call',{name:'shamela_find',arguments:{keywords:['تاريخ الطبري'],difficulty:'easy'}},3);notice('Shamela sample search: '+JSON.stringify({status:out.status,data:out.parsed||out.body}));}
+
   } catch(e) {notice('Shamela probe unavailable: '+e.name+': '+e.message)}
 })().catch(e=>{console.error(e);process.exitCode=1});
