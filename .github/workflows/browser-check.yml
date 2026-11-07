@@ -35,5 +35,9 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_manual.cjs
       - name: Test OpenITI text import, searching and individual source retries
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_sources.cjs
+      - name: Test local multi-source comparison in browser
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_comparison.cjs
+      - name: Test multi-source comparison with local Python backend
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_backend.py
       - name: Check mobile browser against live public services
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/live_browser.cjs
