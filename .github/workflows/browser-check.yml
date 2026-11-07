@@ -27,3 +27,7 @@ jobs:
           node-version: '22'
       - name: Check public catalogs and browser CORS (diagnostic, services may be unavailable)
         run: node tests/check_live_services.cjs
+      - name: Install browser test driver
+        run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
+      - name: Check mobile browser against live public services
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/live_browser.cjs
