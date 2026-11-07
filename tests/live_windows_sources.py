@@ -28,12 +28,16 @@ def turath_live():
     return f"results={len(results)}; selected page read; book={results[0]['book_id']}; page_id={results[0]['page_id']}"
 
 def alexandria_live():
-    results=alexandria_archive.search('Alexandria')['results']
-    article=next((x for x in results if x['url'].startswith('https://www.alexandria-archive.com/article/')),None)
-    if not article: raise ValueError('No public article result')
-    page=alexandria_archive.read_article(article['url'].rsplit('/',1)[-1])
-    if not page['text'] or 'نبذة عامة' not in page['warning']: raise ValueError('No public preview')
-    return f"results={len(results)}; public preview read; article={article['url'].rsplit('/',1)[-1]}"
+    try:
+        results=alexandria_archive.search('Alexandria')['results']
+        article=next((x for x in results if x['url'].startswith('https://www.alexandria-archive.com/article/')),None)
+        if not article: raise ValueError('No public article result')
+        page=alexandria_archive.read_article(article['url'].rsplit('/',1)[-1])
+        if not page['text'] or 'نبذة عامة' not in page['warning']: raise ValueError('No public preview')
+        return f"results={len(results)}; public preview read; article={article['url'].rsplit('/',1)[-1]}"
+    except Exception as exc:
+        return f'unavailable ({type(exc).__name__}: {str(exc)[:160]})'
+
 
 def check(name, fn):
     try:
