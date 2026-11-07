@@ -28,6 +28,8 @@ jobs:
           node-version: '22'
       - name: Probe official Shamela MCP and browser access
         run: node tests/probe_shamela.cjs
+      - name: Probe official newspaper page text API
+        run: node tests/probe_loc_text.cjs
       - name: Check public catalogs and browser CORS (diagnostic, services may be unavailable)
         run: node tests/check_live_services.cjs
       - name: Install browser test driver
