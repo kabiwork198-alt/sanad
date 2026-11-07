@@ -36,7 +36,7 @@ const root=path.resolve(__dirname,'..');
   await page.type('[data-local-query="0"]','موثقة');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
   const m=await page.evaluate(()=>({note:current.sources[0].notes,result:fileMatches.matches[0]}));
   if(!m.note.includes('oldid=42')||!m.result.text.includes('موثقة'))throw Error('Revision provenance or search match missing');
-  await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="sources"]');
+  await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.waitForSelector('[data-project]');await page.click('[data-project]');await page.click('[data-tab="sources"]');
   await page.type('[data-local-query="0"]','موثقة');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
   if(errors.length)throw Error(errors.join('; '));
   console.log('PASS: cancellation, one-page revision download, local search, provenance, and persistence');

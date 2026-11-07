@@ -280,8 +280,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; connect-src 'self' data:; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
-        self.end_headers()
-        self.wfile.write(content)
+        try:
+            self.end_headers()
+            self.wfile.write(content)
+        except (BrokenPipeError, ConnectionResetError):
+            # Browser navigation may abandon a response while it is being sent.
+            return
 
     def allowed_host(self):
         return self.headers.get('Host', '').lower() in (f'127.0.0.1:{PORT}', f'localhost:{PORT}')
@@ -313,7 +317,11 @@ class Handler(BaseHTTPRequestHandler):
             name, content_type = vendor[path]
             return self.send(200, (ROOT / 'web' / 'vendor' / name).read_bytes(), content_type)
         if path == '/api/projects' and self.valid_request():
-            return self.send(200, {'projects': all_projects()})
+            try:
+                projects = all_projects()
+            except (sqlite3.Error, OSError, ValueError, TypeError):
+                return self.send(503, {'error': 'تعذر قراءة قاعدة البيانات المحلية. احتفظ بنسخة من مجلد البيانات وتحقق من المساحة والصلاحيات.'})
+            return self.send(200, {'projects': projects})
         return self.send(404, {'error': 'غير موجود'})
 
     def do_POST(self):
@@ -420,8 +428,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send(404, {'error': 'غير موجود'})
         except (ValueError, json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
             self.send(400, {'error': str(exc) or 'بيانات غير صالحة'})
+        except (BrokenPipeError, ConnectionResetError):
+            return
+        except sqlite3.Error:
+            self.send(503, {'error': 'تعذر الوصول إلى قاعدة البيانات المحلية. احتفظ بنسخة من مجلد البيانات وتحقق من المساحة والصلاحيات.'})
         except (urllib.error.URLError, TimeoutError, OSError):
-            self.send(502, {'error': 'تعذر الاتصال بالخدمة. تحقق من الاتصال أو تشغيل الخادم المحلي وحاول مجددًا.'})
+            self.send(502, {'error': 'تعذر الاتصال بالخدمة أو الوصول إلى الملفات المحلية. تحقق من الاتصال والمساحة والصلاحيات وحاول مجددًا.'})
+        except Exception:
+            # Do not expose remote service responses, local paths, or user data.
+            self.send(500, {'error': 'تعذر إكمال العملية. حاول مجددًا أو احتفظ بنسخة من بياناتك قبل إعادة التشغيل.'})
 
 
 def main():

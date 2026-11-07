@@ -1,4 +1,5 @@
 import base64
+import concurrent.futures
 import importlib.util
 import json
 import tempfile
@@ -43,6 +44,28 @@ class LibraryTest(unittest.TestCase):
         self.assertEqual(result['matches'][0]['location'], 'السطر 2')
         self.assertIn('للتجربة', result['matches'][0]['text'])
         self.assertTrue((self.root / 'library' / (doc['id'] + '.bin')).exists())
+
+    def test_search_rejects_corrupted_content_addressed_file(self):
+        doc = library.import_document(self.root, 'book.txt', base64.b64encode('نص بغداد'.encode()).decode())
+        (self.root / 'library' / (doc['id'] + '.bin')).write_text('نص تغير', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'تالف'):
+            library.search_document(self.root, doc['id'], 'نص')
+        with self.assertRaisesRegex(ValueError, 'تالف'):
+            library.export_document(self.root, doc['id'])
+
+    def test_parallel_import_is_atomic_and_deduplicated(self):
+        encoded=base64.b64encode(('نص بغداد\n'*100000).encode()).decode()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            docs=list(pool.map(lambda _: library.import_document(self.root, 'book.txt', encoded), range(16)))
+        self.assertEqual(len({d['id'] for d in docs}), 1)
+        self.assertEqual(len(list((self.root/'library').iterdir())),1)
+        self.assertTrue(library.search_document(self.root, docs[0]['id'], 'بغداد')['matches'])
+
+    def test_failed_publish_removes_temporary_file(self):
+        encoded=base64.b64encode('نص عربي'.encode()).decode()
+        with mock.patch('sanad.library.os.replace', side_effect=OSError('disk error')):
+            with self.assertRaises(OSError):library.import_document(self.root, 'book.txt', encoded)
+        self.assertEqual(list((self.root/'library').iterdir()), [])
 
     def test_rejects_invalid_or_unsupported_files(self):
         for name, payload in [('a.exe', 'eA=='), ('x.pdf', 'eA=='), ('x.txt', '!')]:

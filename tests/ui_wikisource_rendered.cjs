@@ -26,7 +26,7 @@ const html='<div><style>HIDDEN_STYLE</style><h2>Histoire des Berbères</h2><p>Le
  const result=await page.evaluate(()=>({source:current.sources[0],match:fileMatches.matches[0],injected:window.injected}));
  if(!result.source.notes.includes('oldid=11490985')||!result.source.notes.includes('قد يتغير المحتوى')||!result.match.text.includes('Nefouça')||result.injected)throw Error('bad provenance, text or remote script executed');
  const check=await page.evaluate(async()=>api('/api/library/search',{id:current.sources[0].fileId,query:'HIDDEN_STYLE'}));if(check.matches.length)throw Error('style leaked into stored text');
- await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="sources"]');await page.type('[data-local-query="0"]','Nefouça');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
+ await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.waitForSelector('[data-project]');await page.click('[data-project]');await page.click('[data-tab="sources"]');await page.type('[data-local-query="0"]','Nefouça');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
  for(const width of [320,390,1440]){await page.setViewport({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)>1)throw Error('overflow '+width)}
  if(errors.length)throw Error(errors.join('; '));console.log('PASS: French discovery, consent, rendered transclusion, provenance, safe text, local search and persistence');
  }finally{if(browser)await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});

@@ -433,6 +433,9 @@ window.SANAD_BROWSER = true;
     if(typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))throw Error('معرّف الملف غير صالح');
     if(typeof query!=='string'||trim(query).length<2||query.length>200||!normalize(query).trim())throw Error('أدخل عبارة بحث من حرفين إلى 200 حرف');
     const bytes=await documentStore('readonly',id);if(!bytes)throw Error('الملف غير موجود في هذا المتصفح؛ أضفه مجددًا');
+    if(!bytes.length||bytes.length>MAX_FILE)throw Error('حجم الملف المرتبط غير صالح');
+    const digest=await crypto.subtle.digest('SHA-256',bytes),actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+    if(actual!==id)throw Error('ملف مرتبط تالف أو لا تطابق بصمته المعرّف');
     const needle=normalize(query.trim()),matches=[],head=new TextDecoder().decode(bytes.slice(0,1024));let scanned=0,total=1,fileWarningForSearch=fileWarning;
     if(head.includes('%PDF-')) {
       try {

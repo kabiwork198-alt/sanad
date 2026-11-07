@@ -22,7 +22,7 @@ const root=path.resolve(__dirname,'..'),testUrl=process.env.SANAD_TEST_ORIGIN||'
  const data=await page.evaluate(()=>({claim:current.claims[0],sources:current.sources,evidence:current.evidence}));
  if(data.evidence.length!==2||data.evidence.some(e=>e.claimId!==data.claim.id||e.stance!=='غير محسوم'||!e.excerpt.includes('بغداد'))||data.evidence[0].sourceId===data.evidence[1].sourceId)throw Error('evidence incorrectly linked or classified');
  await page.evaluate(()=>{current.sources[0].fileId='e'.repeat(64)});await page.click('[data-comparison-add="0:0"]');if(await page.evaluate(()=>current.evidence.length)!==2)throw Error('stale result linked');
- await page.evaluate(()=>{current.sources[0].fileId=comparisonResult.groups[0].fileId});await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="claims"]');
+ await page.evaluate(()=>{current.sources[0].fileId=comparisonResult.groups[0].fileId});await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.waitForSelector('[data-project]');await page.click('[data-project]');await page.click('[data-tab="claims"]');
  const saved=await page.evaluate(()=>current.evidence);if(saved.length!==2||!saved.every(x=>x.stance==='غير محسوم'))throw Error('evidence not saved');
  await page.click('[data-tab="sources"]');
  await page.evaluate(()=>{for(let i=0;i<21;i++)current.sources.push({id:uid(),title:'إضافي '+i,fileId:current.sources[0].fileId});render()});

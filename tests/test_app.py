@@ -97,6 +97,25 @@ class SanadTest(unittest.TestCase):
         with self.assertRaises(ValueError): app.search_youtube('', 'key')
         with self.assertRaises(ValueError): app.search_youtube('history', '')
 
+    def test_storage_and_unexpected_errors_return_safe_json(self):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), app.Handler)
+        old_port=app.PORT; app.PORT=server.server_port
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        self.addCleanup(thread.join,2);self.addCleanup(setattr,app,'PORT',old_port);self.addCleanup(server.server_close);self.addCleanup(server.shutdown)
+        base=f'http://127.0.0.1:{app.PORT}';headers={'X-Sanad-Token':app.TOKEN,'Origin':base,'Content-Type':'application/json'}
+        with mock.patch('sanad.app.save_project',side_effect=sqlite3.OperationalError('secret local path')):
+            req=urllib.request.Request(base+'/api/save',data=json.dumps({'project':project()}).encode(),headers=headers)
+            with self.assertRaises(urllib.error.HTTPError) as cm:urllib.request.urlopen(req)
+            self.assertEqual(cm.exception.code,503);self.assertNotIn('secret',cm.exception.read().decode())
+        with mock.patch('sanad.app.openiti.read_text',side_effect=RuntimeError('secret service response')):
+            req=urllib.request.Request(base+'/api/openiti/read',data=b'{}',headers=headers)
+            with self.assertRaises(urllib.error.HTTPError) as cm:urllib.request.urlopen(req)
+            self.assertEqual(cm.exception.code,500);self.assertNotIn('secret',cm.exception.read().decode())
+        with mock.patch('sanad.app.all_projects',side_effect=sqlite3.DatabaseError('secret')):
+            req=urllib.request.Request(base+'/api/projects',headers={'X-Sanad-Token':app.TOKEN})
+            with self.assertRaises(urllib.error.HTTPError) as cm:urllib.request.urlopen(req)
+            self.assertEqual(cm.exception.code,503);self.assertNotIn('secret',cm.exception.read().decode())
+
     def test_http_token_origin_host_and_save(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), app.Handler)
         old_port = app.PORT

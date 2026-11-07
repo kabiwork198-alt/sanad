@@ -38,6 +38,8 @@ jobs:
         run: node tests/check_live_services.cjs
       - name: Install browser test driver
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
+      - name: Test responsive interface, save races and file integrity
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_quality.cjs && NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_initial_load.cjs
       - name: Install PDF test helper
         run: python -m pip install pypdf==5.9.0
       - name: Test real local Arabic and English OCR and PDF in browser and local modes

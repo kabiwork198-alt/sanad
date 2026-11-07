@@ -2,6 +2,10 @@
 import base64
 import binascii
 import hashlib
+import io
+import os
+import tempfile
+import threading
 import re
 import unicodedata
 from pathlib import Path
@@ -9,6 +13,7 @@ from pathlib import Path
 MAX_FILE = 20 * 1024 * 1024
 MAX_PAGES = 300
 MAX_MATCHES = 12
+_IMPORT_LOCK = threading.Lock()
 
 
 def import_document(data_dir, name, encoded):
@@ -36,31 +41,40 @@ def import_document(data_dir, name, encoded):
     folder = Path(data_dir) / 'library'
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / (ident + '.bin')
-    if not target.exists():
-        # Hash-derived path and exclusive create avoid trusting a supplied filename.
-        try:
-            with target.open('xb') as f:
-                f.write(content)
-        except FileExistsError:
-            pass
-    # Never report success while an existing content-addressed file is corrupt.
-    if target.stat().st_size != len(content) or hashlib.sha256(target.read_bytes()).hexdigest() != ident:
-        raise ValueError('الملف المحلي الموجود تالف؛ لم يُستبدل. احتفظ بنسخة منه وأعد إرفاق الملف بعد حل المشكلة')
+    # Publish only a fully written file. Serialize imports within this process so
+    # a simultaneous import cannot mistake an in-progress write for corruption.
+    with _IMPORT_LOCK:
+        if not target.exists():
+            fd, temporary = tempfile.mkstemp(prefix='.import-', dir=folder)
+            try:
+                with os.fdopen(fd, 'wb') as f:
+                    f.write(content)
+                os.replace(temporary, target)
+            finally:
+                try: os.unlink(temporary)
+                except FileNotFoundError: pass
+        if target.stat().st_size != len(content) or hashlib.sha256(target.read_bytes()).hexdigest() != ident:
+            raise ValueError('الملف المحلي الموجود تالف؛ لم يُستبدل. احتفظ بنسخة منه وأعد إرفاق الملف بعد حل المشكلة')
     return {'id': ident, 'name': name.replace('\\', '/').split('/')[-1], 'size': len(content), 'kind': suffix[1:]}
 
 
-def export_document(data_dir, ident):
-    """Export only a content-addressed local file, verifying it before backup."""
+def read_verified_document(data_dir, ident):
+    """Read a bounded content-addressed file and reject changed/corrupt data."""
     if not isinstance(ident, str) or not re.fullmatch(r'[0-9a-f]{64}', ident):
         raise ValueError('معرّف الملف غير صالح')
     path = Path(data_dir) / 'library' / (ident + '.bin')
     if not path.is_file():
-        raise ValueError('ملف مرتبط مفقود؛ أعد إرفاقه قبل إنشاء نسخة شاملة')
-    if path.stat().st_size > MAX_FILE:
-        raise ValueError('ملف مرتبط أكبر من الحد المسموح')
-    data = path.read_bytes()
+        raise ValueError('ملف مرتبط مفقود؛ أعد إرفاقه')
+    with path.open('rb') as f:
+        data = f.read(MAX_FILE + 1)
     if not data or len(data) > MAX_FILE or hashlib.sha256(data).hexdigest() != ident:
         raise ValueError('ملف مرتبط تالف أو لا تطابق بصمته المعرّف')
+    return data
+
+
+def export_document(data_dir, ident):
+    """Export only a content-addressed local file, verifying it before backup."""
+    data = read_verified_document(data_dir, ident)
     kind = 'pdf' if b'%PDF-' in data[:1024] else 'txt'
     return {'id': ident, 'name': ident + '.' + kind, 'size': len(data),
             'content': base64.b64encode(data).decode('ascii')}
@@ -91,10 +105,7 @@ def search_document(data_dir, ident, query):
     needle = normalize(query.strip())
     if not needle.strip():
         raise ValueError('عبارة البحث غير صالحة')
-    path = Path(data_dir) / 'library' / (ident + '.bin')
-    if not path.is_file():
-        raise ValueError('الملف المحلي غير موجود؛ أضفه مجددًا')
-    data = path.read_bytes()
+    data = read_verified_document(data_dir, ident)
     pdf = b'%PDF-' in data[:1024]
     total_pages = 1
     scanned = 0
@@ -105,7 +116,7 @@ def search_document(data_dir, ident, query):
         except ImportError:
             raise ValueError('قراءة PDF غير متاحة: ثبّت pypdf أو استخدم النسخة المحمولة التي تتضمنه')
         try:
-            reader = PdfReader(path, strict=False)
+            reader = PdfReader(io.BytesIO(data), strict=False)
             if reader.is_encrypted:
                 raise ValueError('هذا الملف محمي أو مشفر؛ لا يتجاوز سَنَد الحماية. أضف نسخة مسموحة قابلة للقراءة.')
             total_pages = len(reader.pages)
