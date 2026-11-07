@@ -84,6 +84,12 @@ jobs:
         run: |
           NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_wikisource_rendered.cjs
           NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_rendered.py
+      - name: Test Open Library editions and Archive OCR in browser and local app
+        run: |
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_openlibrary_editions.cjs
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_openlibrary_editions.py
+      - name: Diagnose Open Library editions and OCR live in Chromium
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_openlibrary_editions.cjs
       - name: Diagnose multilingual Wikisource in Chromium
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_wikisource_multilingual.cjs
       - name: Test Wikisource import and search in a mobile browser

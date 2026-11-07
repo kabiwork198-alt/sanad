@@ -214,3 +214,39 @@ def read_wikisource_rendered(page_id, language):
     return {'title':str(item.get('title') or 'بلا عنوان')[:300], 'page_id':page_id, 'language':language, 'revision_id':rev,
             'revision_url':'https://'+language+'.wikisource.org/w/index.php?oldid='+rev, 'text':text,
             'warning':'نص آلي مستخرج من صفحة معروضة وقد يضم ترويسات وحواشي أو أخطاء؛ المراجعة تخص الصفحة وقد يتغير المحتوى المضمّن والقوالب. رقم السطر ليس صفحة الطبعة. راجع صورة المصدر والطبعة والترجمة والحقوق.'}
+
+
+def openlibrary_editions(work_id, offset=0):
+    """List one page of editions, preserving distinct Archive item IDs and provenance."""
+    if not isinstance(work_id, str) or not re.fullmatch(r'OL[0-9]{1,12}W', work_id):
+        raise ValueError('معرّف عمل Open Library غير صالح')
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0 or offset > 1000 or offset % 20:
+        raise ValueError('صفحة الطبعات غير صالحة')
+    data = get_json('https://openlibrary.org/works/' + work_id + '/editions.json', {'limit':'20', 'offset':str(offset)})
+    if not isinstance(data,dict) or not isinstance(data.get('entries'),list):
+        raise ValueError('استجابة الطبعات غير صالحة')
+    total = data.get('size')
+    if not isinstance(total,int) or isinstance(total,bool) or total<0: total=None
+    editions=[]
+    for entry in data['entries'][:20]:
+        if not isinstance(entry,dict): continue
+        key = entry.get('key')
+        if not isinstance(key,str) or not re.fullmatch(r'/books/OL[0-9]{1,12}M',key): continue
+        works = entry.get('works')
+        if isinstance(works,list) and works and not any(isinstance(w,dict) and w.get('key') == '/works/'+work_id for w in works): continue
+        ia = entry.get('ocaid')
+        if not isinstance(ia,str) or not re.fullmatch(r'[A-Za-z0-9._-]{1,100}',ia) or ia in ('.','..'): ia=''
+        publishers=entry.get('publishers')
+        if not isinstance(publishers,list): publishers=[]
+        languages=entry.get('languages')
+        if not isinstance(languages,list): languages=[]
+        languages=[x.get('key','').split('/')[-1] for x in languages[:8] if isinstance(x,dict) and isinstance(x.get('key'),str) and re.fullmatch(r'/languages/[A-Za-z]{3}',x['key'])]
+        editions.append({'title':str(entry.get('title') or 'بلا عنوان')[:300], 'edition_url':'https://openlibrary.org'+key,
+                         'archive_id':ia, 'archive_url':'https://archive.org/details/'+ia if ia else '',
+                         'date':str(entry.get('publish_date') or '')[:100],
+                         'publisher':', '.join(str(x) for x in publishers[:5])[:300],
+                         'language':', '.join(languages)[:100]})
+    return {'work_url':'https://openlibrary.org/works/'+work_id, 'offset':offset, 'total':total,
+            'has_more':len(data['entries'])==20 and (total is None or offset+20<total) and offset<1000,
+            'editions':editions,
+            'warning':'هذه سجلات طبعات، وليست إثباتًا لإتاحة النص أو تطابق الطبعة أو حقوقها. افتح سجل الطبعة والأرشيف للتحقق؛ قد يكون بعضها للإعارة أو بلا OCR.'}

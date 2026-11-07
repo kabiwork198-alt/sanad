@@ -40,6 +40,8 @@ jobs:
         run: python -c "import runpy; runpy.run_path('tests/live_qdl.py')"
       - name: Diagnose multilingual Wikisource
         run: python -c "import runpy; runpy.run_path('tests/live_wikisource_multilingual.py')"
+      - name: Diagnose live Open Library editions and OCR
+        run: python -c "import runpy; runpy.run_path('tests/live_openlibrary_editions.py')"
       - name: Build standalone executable
         run: python -m PyInstaller --noconfirm --clean --onefile --console --name Sanad-Studio --add-data "web;web" launch.py
       - name: Smoke test executable

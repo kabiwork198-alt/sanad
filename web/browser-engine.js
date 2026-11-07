@@ -142,6 +142,29 @@ window.SANAD_BROWSER = true;
     const topics=(d.query?.categorymembers||[]).filter(x=>Number.isSafeInteger(x.pageid)&&x.pageid>0&&typeof x.title==='string'&&x.title.trim()).map(x=>({title:x.title.slice(0,200),url:'https://ar.wikipedia.org/?curid='+x.pageid}));
     return {topics,searched_at:new Date().toISOString()};
   }
+  async function openlibraryEditions(workId,offset=0){
+    if(typeof workId!=='string'||!/^OL[0-9]{1,12}W$/.test(workId))throw Error('معرّف عمل Open Library غير صالح');
+    if(!Number.isInteger(offset)||offset<0||offset>1000||offset%20)throw Error('صفحة الطبعات غير صالحة');
+    const url='https://openlibrary.org/works/'+workId+'/editions.json?'+params({limit:'20',offset:String(offset)});
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);let size=0,chunks=[],d;
+    try{
+      const r=await fetch(url,{signal:controller.signal,credentials:'omit',redirect:'error'});if(!r.ok)throw Error('تعذر جلب الطبعات (HTTP '+r.status+')');
+      if(Number(r.headers.get('Content-Length')||0)>2000000)throw Error('استجابة الطبعات كبيرة جدًا');
+      if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>2000000){await reader.cancel();throw Error('استجابة الطبعات كبيرة جدًا')}chunks.push(part.value)}}finally{reader.releaseLock()}}
+      else throw Error('المتصفح لا يدعم القراءة المحدودة للطبعات');
+      const bytes=new Uint8Array(size);let at=0;for(const part of chunks){bytes.set(part,at);at+=part.length}d=JSON.parse(new TextDecoder().decode(bytes));
+    }catch(e){if(e.name==='AbortError')throw Error('انتهت مهلة Open Library');if(e instanceof TypeError)throw Error('تعذر الاتصال بـ Open Library');throw e}finally{clearTimeout(timer)}
+    if(!d||!Array.isArray(d.entries))throw Error('استجابة الطبعات غير صالحة');
+    const total=Number.isSafeInteger(d.size)&&d.size>=0?d.size:null,editions=[];
+    for(const e of d.entries.slice(0,20)){
+      if(!e||typeof e.key!=='string'||!/^\/books\/OL[0-9]{1,12}M$/.test(e.key))continue;
+      if(Array.isArray(e.works)&&e.works.length&&!e.works.some(w=>w&&w.key==='/works/'+workId))continue;
+      const ia=typeof e.ocaid==='string'&&/^[A-Za-z0-9._-]{1,100}$/.test(e.ocaid)&&!['.','..'].includes(e.ocaid)?e.ocaid:'';
+      const publishers=Array.isArray(e.publishers)?e.publishers:[],languages=Array.isArray(e.languages)?e.languages:[];
+      editions.push({title:String(e.title||'بلا عنوان').slice(0,300),edition_url:'https://openlibrary.org'+e.key,archive_id:ia,archive_url:ia?'https://archive.org/details/'+ia:'',date:String(e.publish_date||'').slice(0,100),publisher:publishers.slice(0,5).map(String).join(', ').slice(0,300),language:languages.slice(0,8).filter(x=>x&&typeof x.key==='string'&&/^\/languages\/[A-Za-z]{3}$/.test(x.key)).map(x=>x.key.split('/').pop()).join(', ').slice(0,100)});
+    }
+    return {work_url:'https://openlibrary.org/works/'+workId,offset,total,has_more:d.entries.length===20&&(total===null||offset+20<total)&&offset<1000,editions,warning:'هذه سجلات طبعات، وليست إثباتًا لإتاحة النص أو تطابق الطبعة أو حقوقها. افتح سجل الطبعة والأرشيف للتحقق؛ قد يكون بعضها للإعارة أو بلا OCR.'};
+  }
   async function wikiCitations(q) {
     const search=await getJSON(wikiAPI({action:'query',list:'search',srsearch:q,srlimit:'1',srnamespace:'0'}));
     const page=search.query?.search?.[0];
@@ -458,6 +481,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/research')return research(data.query,data.provider);
     if(path==='/api/crossref')return {results:await crossref(data.query)};
     if(path==='/api/openlibrary')return {results:await openlibrary(data.query)};
+    if(path==='/api/openlibrary/editions')return openlibraryEditions(data.work_id,data.offset??0);
     if(path==='/api/youtube')return {results:await youtube(data.query,data.key)};
     if(path==='/api/library/import')return {document:await importDocument(data.name,data.content)};
     if(path==='/api/library/export')return {document:await exportDocument(data.id)};

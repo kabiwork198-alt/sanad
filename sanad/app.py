@@ -363,6 +363,8 @@ class Handler(BaseHTTPRequestHandler):
                 if path == '/api/prepare-prompt':
                     return self.send(200, {'prompt': workflow.script_prompt(project)})
                 return self.send(200, workflow.script_draft(project))
+            if path == '/api/openlibrary/editions':
+                return self.send(200, catalogs.openlibrary_editions(body.get('work_id', ''), body.get('offset', 0)))
             if path == '/api/openlibrary':
                 return self.send(200, {'results': search_openlibrary(body.get('query', ''))})
             if path == '/api/youtube':
