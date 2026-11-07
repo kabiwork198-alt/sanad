@@ -22,7 +22,11 @@ def runtime_paths():
     # User data must live elsewhere so it survives closing or updating the exe.
     if getattr(sys, 'frozen', False):
         root = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
-        default_data = Path(os.environ.get('LOCALAPPDATA') or (Path.home() / 'AppData' / 'Local')) / 'SanadStudio'
+        if os.environ.get('SANAD_DATA_DIR'):
+            default_data = Path(os.environ['SANAD_DATA_DIR'])
+        else:
+            local_app_data = os.environ.get('LOCALAPPDATA')
+            default_data = (Path(local_app_data) if local_app_data else Path.home() / 'AppData' / 'Local') / 'SanadStudio'
     else:
         root = Path(__file__).resolve().parent.parent
         default_data = root / '.sanad-data'

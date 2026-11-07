@@ -51,4 +51,4 @@ py -3 -m sanad.app
 py -3 -m unittest discover -s tests -v
 ```
 
-[دراسة الجدوى وخطة التطوير](docs/feasibility-and-mvp.md)
+[دراسة الجدوى وخطة التطوير](docs/feasibility-and-mvp.md) · [تصور نظام البحث التاريخي](docs/research-system-vision.md)
