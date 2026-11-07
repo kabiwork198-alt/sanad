@@ -191,6 +191,37 @@ window.SANAD_BROWSER = true;
     } catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال بويكي مصدر');throw e}
     finally {clearTimeout(timer)}
   }
+  const iaLimit=16*1024*1024;
+  function iaIdentifier(id){if(typeof id!=='string'||!/^[A-Za-z0-9._-]{1,100}$/.test(id)||id==='.'||id==='..')throw Error('معرّف Internet Archive غير صالح');return id;}
+  function iaTruthy(v){return v===true||['true','1','yes'].includes(String(v).toLowerCase());}
+  async function iaFetch(url,limit){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);let bytes=0,chunks=[];
+    try{
+      const r=await fetch(url,{signal:controller.signal,credentials:'omit'});
+      if(!r.ok)throw Error('تعذر الوصول إلى Internet Archive (HTTP '+r.status+')');
+      if(r.url){const u=new URL(r.url);if(u.protocol!=='https:'||u.username||u.password||u.port||!(u.hostname==='archive.org'||/^ia[0-9]+\.us\.archive\.org$/.test(u.hostname)))throw Error('إعادة توجيه Internet Archive غير مدعومة');}
+      if((r.headers.get('Content-Type')||'').toLowerCase().startsWith('text/html'))throw Error('لم يُرجع الموقع نصًا أو بيانات صالحة');
+      if(Number(r.headers.get('Content-Length')||0)>limit)throw Error('استجابة Internet Archive أكبر من الحد الآمن');
+      if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const p=await reader.read();if(p.done)break;bytes+=p.value.length;if(bytes>limit){await reader.cancel();throw Error('استجابة Internet Archive أكبر من الحد الآمن')}chunks.push(p.value)}}finally{reader.releaseLock()}}
+      else {const p=new Uint8Array(await r.arrayBuffer());bytes=p.length;if(bytes>limit)throw Error('استجابة Internet Archive أكبر من الحد الآمن');chunks=[p]}
+      const out=new Uint8Array(bytes);let at=0;for(const p of chunks){out.set(p,at);at+=p.length}return out;
+    }catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال بـ Internet Archive');if(e instanceof TypeError)throw Error('تعذر الاتصال بـ Internet Archive أو حظر المتصفح الاستجابة');throw e}finally{clearTimeout(timer)}
+  }
+  async function readInternetArchive(id){
+    id=iaIdentifier(id);let d;
+    try{d=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await iaFetch('https://archive.org/metadata/'+id,2000000)))}catch(e){if(e instanceof SyntaxError)throw Error('تعذر قراءة بيانات Internet Archive');throw e}
+    const meta=d?.metadata;if(!meta||meta.identifier!==id||meta.mediatype!=='texts')throw Error('لم يُعثر على سجل نصي متاح');
+    if(iaTruthy(d.is_dark)||iaTruthy(meta['access-restricted-item'])||meta.lending_edition||meta.lending_identifier)throw Error('المادة مقيّدة أو للإعارة؛ افتح سجلها ولا يتجاوز سَنَد القيود');
+    if(!Array.isArray(d.files))throw Error('قائمة الملفات غير متاحة');
+    const files=d.files.filter(x=>x&&typeof x.name==='string'&&x.name.endsWith('_djvu.txt')&&x.name.length<=255&&!(/[\x00-\x1f/\\]/.test(x.name))&&!iaTruthy(x.private)&&/^[0-9]+$/.test(String(x.size||''))&&Number(x.size)>0&&Number(x.size)<=iaLimit).sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0);
+    if(!files.length)throw Error('لا يوجد نص OCR عام مناسب حتى 16 ميجابايت في السجل؛ افتح الموقع أو أضف نسخة مسموحة');
+    const file=files[0],encoded=encodeURIComponent(file.name),raw=await iaFetch('https://archive.org/cors/'+id+'/'+encoded,iaLimit),sha1=/^[0-9a-f]{40}$/i.test(file.sha1||'')?file.sha1.toLowerCase():'';
+    if(raw.length!==Number(file.size))throw Error('تغير الملف أو لم يكتمل تنزيله؛ حاول مجددًا');
+    if(sha1){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-1',raw))).map(x=>x.toString(16).padStart(2,'0')).join('');if(hash!==sha1)throw Error('تغير الملف أو لم يكتمل تنزيله؛ حاول مجددًا')}
+    let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(raw)}catch{throw Error('ترميز نص OCR غير مدعوم')}
+    if(!text.trim()||text.includes('\0'))throw Error('لم يُرجع الموقع نص OCR صالحًا');
+    return {text,filename:file.name,url:'https://archive.org/details/'+id,file_url:'https://archive.org/download/'+id+'/'+encoded,sha1,warning:'نص OCR آلي قد يحتوي أخطاء أو ينقصه سياق، ورقم السطر ليس صفحة الطبعة. الإتاحة لا تثبت حق إعادة الاستخدام؛ راجع حقوق المادة وطابق الاقتباس مع صور الأصل.'};
+  }
   // The upstream metadata snapshot is downloaded only after explicit user action.
   const openitiRevision='cfc4157a3cf2054c0888f133970a4eaa3e22e58c';
   const openitiURL='https://raw.githubusercontent.com/OpenITI/RELEASE/'+openitiRevision+'/metadata/OpenITI_metadata_2025-1-9.tsv';
@@ -315,6 +346,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/save'){validate(data.project);const items=projects().filter(x=>x.id!==data.project.id);items.unshift(data.project);writeProjects(items);return {ok:true};}
     if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
     if(path==='/api/topics')return topics();
+    if(path==='/api/internet-archive/read')return readInternetArchive(data.identifier);
     if(path==='/api/wikisource/read')return readWikisource(data.page_id);
     if(path==='/api/openiti/read')return readOpeniti(data.path);
     if(path==='/api/openiti/search')return searchOpeniti(data.query);

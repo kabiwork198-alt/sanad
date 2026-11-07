@@ -3,7 +3,7 @@ import concurrent.futures
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sanad import catalogs, openiti, shamela
+from sanad import catalogs, openiti, shamela, internet_archive
 
 def wiki():
     page = catalogs.read_wikisource('43576')
@@ -28,6 +28,7 @@ def check(name, fn):
         return f'{name}: unavailable ({type(exc).__name__})'
 
 checks = [
+    ('Internet Archive sample OCR', lambda: f"characters={len(internet_archive.read_text('frenchenglishmed00gorduoft')['text'])}"),
     ('Wikisource selected revision', wiki),
     ('Official Shamela MCP and page', shamela_live),
     ('OpenITI index history search', lambda: f"matches={openiti.search('تاريخ الطبري')['total']}"),

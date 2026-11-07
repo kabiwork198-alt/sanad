@@ -61,6 +61,17 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   } catch(e) {const state=await page.evaluate(()=>({tab,toast:document.querySelector('#toast')?.textContent,sourceCount:current?.sources.length,wikiButtons:document.querySelectorAll('[data-wiki-read]').length}));report('Wikisource live UI unavailable: '+e.message.slice(0,100)+' '+JSON.stringify(state));}
 
 
+  // Public OCR sample: real UI, metadata, bounded download, checksum and local search.
+  try {
+    const index=await page.evaluate(()=>{current.sources.push({id:crypto.randomUUID().replaceAll('-',''),title:'Public OCR sample',author:'',url:'https://archive.org/details/frenchenglishmed00gorduoft',access:'',notes:''});document.querySelector('[data-tab="sources"]').click();return current.sources.length-1});
+    await page.click(`[data-archive-read="${index}"]`);
+    await page.waitForSelector(`[data-local-search="${index}"]`,{timeout:90000});
+    await page.type(`[data-local-query="${index}"]`,'the');await page.click(`[data-local-search="${index}"]`);await page.waitForSelector('[data-match="0"]',{timeout:25000});
+    const source=await page.evaluate(i=>current.sources[i],index);
+    if(!source.notes.includes('_djvu.txt')||!source.notes.includes('SHA-1'))throw Error('OCR provenance missing');
+    report('Internet Archive live UI: public OCR downloaded, checksum checked when present, provenance retained and phrase found locally');
+  } catch(e) {const state=await page.evaluate(()=>document.querySelector('#toast')?.textContent);report('Internet Archive live UI unavailable: '+String(e.message).slice(0,100)+' '+state);}
+
   // Public pinned OpenITI index is fetched by the real browser only with consent.
   try {
     await page.click('[data-tab="research"]');
