@@ -73,6 +73,10 @@ jobs:
             $env:SANAD_TEST_PYTHON = (Get-Command python).Source
             node tests/ui_real_workflow.cjs
             if ($LASTEXITCODE -ne 0) { throw 'Bundled executable end-to-end researcher workflow failed.' }
+            node tests/ui_hadith.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled executable hadith lookup test failed.' }
+            node tests/live_hadith.cjs
+            if ($LASTEXITCODE -ne 0) { Write-Warning 'Live hadith service unavailable; this diagnostic does not assess text or rights.' }
             node tests/ui_history.cjs
             if ($LASTEXITCODE -ne 0) { throw 'Bundled executable historical citation and local search test failed.' }
             node tests/ui_research_expanded.cjs

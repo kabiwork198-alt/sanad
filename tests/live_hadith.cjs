@@ -1,0 +1,11 @@
+// Diagnostic: real external requests, never an authenticity or rights assessment.
+const puppeteer=require('puppeteer-core');const origin=process.env.SANAD_TEST_ORIGIN;if(!origin)throw Error('SANAD_TEST_ORIGIN required');
+(async()=>{let browser;try{browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage',...(process.env.SANAD_TEST_IGNORE_CERT_ERRORS==='1'?['--ignore-certificate-errors']:[])]});const page=await browser.newPage();let network=0;const errors=[];
+ page.on('requestfailed',r=>{if(r.url().startsWith('https://api.github.com/'))console.log('GitHub browser network:',r.failure()?.errorText)});page.on('dialog',d=>d.accept(d.type()==='prompt'?'اختبار مصدر الحديث':undefined));page.on('pageerror',e=>errors.push(e.message));
+ await page.setRequestInterception(true);page.on('request',r=>{const u=new URL(r.url());if(u.origin===new URL(origin).origin||['data:','blob:'].includes(u.protocol))return r.continue();if(u.origin==='https://api.github.com'&&u.pathname.startsWith('/repos/fawazahmed0/hadith-api/contents/')){network++;return r.continue()}return r.abort()});
+ await page.goto(origin,{waitUntil:'load'});await page.click('#empty-new');await page.click('[data-tab="research"]');await page.type('#hadith-number','1');await page.click('#hadith-lookup');
+ await page.waitForFunction(()=>!!document.querySelector('#hadith-add')||document.querySelector('#toast').textContent.includes('تعذر'),{timeout:25000});
+ if(!await page.$('#hadith-add'))throw Error('Live lookup did not complete: '+await page.$eval('#toast',x=>x.textContent));
+ const text=await page.$eval('#hadith-add',x=>x.parentElement.textContent);if(!text.includes('الْأَعْمَالُ')||!text.includes('لم يرد حكم')||network!==1||errors.length)throw Error('Unexpected real record/network/errors: '+JSON.stringify({network,errors}));
+ console.log('PASS: real GitHub API single record in Chromium; no assessment of authenticity or rights'+(process.env.SANAD_TEST_IGNORE_CERT_ERRORS==='1'?' (diagnostic browser certificate errors ignored)':''));
+ }finally{if(browser)await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});
