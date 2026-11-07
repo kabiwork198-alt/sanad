@@ -1,0 +1,2 @@
+Tesseract.js 6.0.1 and tesseract.js-core 6.0.0: https://github.com/naptha/tesseract.js ; Apache License 2.0 (see TESSERACT-LICENSE.txt and CORE-LICENSE.txt). The wasm.js file contains the LSTM WebAssembly binary and runs locally.
+Language data: @tesseract.js-data/ara@1.0.0 and @tesseract.js-data/eng@1.0.0, 4.0.0_best_int, from https://github.com/naptha/tessdata ; language-data packaging MIT; Tesseract trained data Apache 2.0, https://github.com/tesseract-ocr/tessdata_best . Both are shipped locally; no CDN/model download is required.

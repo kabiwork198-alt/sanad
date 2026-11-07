@@ -38,6 +38,12 @@ jobs:
         run: node tests/check_live_services.cjs
       - name: Install browser test driver
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
+      - name: Install PDF test helper
+        run: python -m pip install pypdf==5.9.0
+      - name: Test real local Arabic and English OCR and PDF in browser and local modes
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_ocr.py
+      - name: Diagnose OCR on a historic public-domain Arabic scan
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_ocr_scan.py
       - name: Test complete backup interoperability
         run: |
           set +e

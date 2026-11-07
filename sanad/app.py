@@ -269,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(content)))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; connect-src 'self' data:; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         self.end_headers()
         self.wfile.write(content)
 
@@ -290,6 +290,18 @@ class Handler(BaseHTTPRequestHandler):
             if name == 'index.html':
                 content = content.replace(b'__SANAD_TOKEN__', TOKEN.encode('ascii'))
             return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+        vendor = {
+            '/vendor/pdf.min.mjs': ('pdf.min.mjs', 'text/javascript; charset=utf-8'),
+            '/vendor/pdf.worker.min.mjs': ('pdf.worker.min.mjs', 'text/javascript; charset=utf-8'),
+            '/vendor/ocr/tesseract.min.js': ('ocr/tesseract.min.js', 'text/javascript; charset=utf-8'),
+            '/vendor/ocr/worker.min.js': ('ocr/worker.min.js', 'text/javascript; charset=utf-8'),
+            '/vendor/ocr/tesseract-core-lstm.wasm.js': ('ocr/tesseract-core-lstm.wasm.js', 'text/javascript; charset=utf-8'),
+            '/vendor/ocr/data/ara.traineddata.gz': ('ocr/data/ara.traineddata.gz', 'application/octet-stream'),
+            '/vendor/ocr/data/eng.traineddata.gz': ('ocr/data/eng.traineddata.gz', 'application/octet-stream'),
+        }
+        if path in vendor:
+            name, content_type = vendor[path]
+            return self.send(200, (ROOT / 'web' / 'vendor' / name).read_bytes(), content_type)
         if path == '/api/projects' and self.valid_request():
             return self.send(200, {'projects': all_projects()})
         return self.send(404, {'error': 'غير موجود'})

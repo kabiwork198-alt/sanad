@@ -133,6 +133,17 @@ class SanadTest(unittest.TestCase):
         req = urllib.request.Request(base+'/api/save', data=b'{}', headers={'X-Sanad-Token':app.TOKEN,'Origin':'http://evil.example'})
         with self.assertRaises(urllib.error.HTTPError) as cm: urllib.request.urlopen(req)
         self.assertEqual(cm.exception.code,403)
+        with urllib.request.urlopen(base+'/vendor/ocr/data/ara.traineddata.gz') as r:
+            self.assertEqual(r.status, 200)
+            self.assertEqual(r.headers.get_content_type(), 'application/octet-stream')
+            self.assertTrue(r.read().startswith(b'\x1f\x8b'))
+        with urllib.request.urlopen(base+'/') as r:
+            policy=r.headers['Content-Security-Policy']
+            self.assertIn("worker-src 'self'",policy)
+            self.assertIn("'wasm-unsafe-eval'",policy)
+            self.assertIn("connect-src 'self' data:",policy)
+        with self.assertRaises(urllib.error.HTTPError) as cm: urllib.request.urlopen(base+'/vendor/ocr/unknown')
+        self.assertEqual(cm.exception.code,404)
         req = urllib.request.Request(base+'/', headers={'Host':'evil.example'})
         with self.assertRaises(urllib.error.HTTPError) as cm: urllib.request.urlopen(req)
         self.assertEqual(cm.exception.code,403)
