@@ -71,6 +71,8 @@ jobs:
             $env:CHROME_BIN = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
             $env:SANAD_TEST_ORIGIN = 'http://127.0.0.1:8765/'
             $env:SANAD_TEST_PYTHON = (Get-Command python).Source
+            node tests/ui_research_expanded.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled executable multi-query research test failed.' }
             node tests/ui_ocr_batch.cjs
             if ($LASTEXITCODE -ne 0) { throw 'Bundled executable batch OCR test failed.' }
             node tests/ui_mineru.cjs

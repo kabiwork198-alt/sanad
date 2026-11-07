@@ -36,7 +36,7 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   await page.click('#home-discover');
   await page.waitForFunction(()=>!document.querySelector('#home-discover').disabled,{timeout:25000});
   report('Browser topic cards: '+(await page.$$('[data-start-topic]')).length);
-  await page.click('#empty-new');await page.click('[data-tab="research"]');await page.click('#research-search');
+  await page.click('#empty-new');await page.click('[data-tab="research"]');await page.select('#research-mode','single');await page.click('#research-search');
   await page.waitForFunction(()=>typeof researchResult!=='undefined'&&researchResult!==null,{timeout:45000});
   const result=await page.evaluate(()=>researchResult);
   const interesting=p=>['المكتبة الرقمية العالمية','صحف Chronicling America','مخطوطات مالي الإسلامية','DOAJ','OpenAlex'].includes(p.provider);

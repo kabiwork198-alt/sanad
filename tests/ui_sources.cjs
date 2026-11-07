@@ -25,7 +25,7 @@ const root=path.resolve(__dirname,'..');
  await page.type('[data-local-query="0"]','دفتر كان كثيرا');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
  const match=await page.evaluate(()=>fileMatches.matches[0]);if(!match.text.includes('دفتر كان كثيرا')||!match.location.includes('ليس رقم صفحة'))throw Error('cross-line OpenITI match missing');
  await page.click('[data-match="0"]');const claim=await page.evaluate(()=>current.claims[0]);if(claim.sourceId!==source.id||!claim.notes.includes('دفتر كان كثيرا')||claim.status!=='لم يُفحص')throw Error('passage not linked for review');
- await page.click('[data-tab="research"]');await page.click('#research-search');await page.waitForSelector('[data-retry-provider="0"]');
+ await page.click('[data-tab="research"]');await page.select('#research-mode','single');await page.click('#research-search');await page.waitForSelector('[data-retry-provider="0"]');
  let status=await page.evaluate(()=>researchResult.providers[0]);if(status.reason!=='HTTP 429')throw Error('wrong diagnostic: '+JSON.stringify(status));
  await page.click('[data-retry-provider="0"]');await page.waitForFunction(()=>researchResult.providers[0].status==='اكتمل');
  status=await page.evaluate(()=>({provider:researchResult.providers[0],title:researchResult.results[0]?.title}));if(crossrefCalls!==2||status.title!=='Recovered')throw Error('retry failed');
