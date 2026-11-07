@@ -22,9 +22,9 @@ try:
         if state['stage']!='done':raise RuntimeError('search %s %s' % (state['stage'],state['error']))
         if not state['results']:raise RuntimeError('search returned no results')
         with zipfile.ZipFile(job.zip) as archive:
-            first=next((r for r in state['results'] if archive.getinfo(r['uri']).file_size<=16*1024*1024),None)
+            first=next((r for r in state['results'] if archive.getinfo(r['member']).file_size<=16*1024*1024),None)
         if not first:raise RuntimeError('all sample matches exceed per-book save limit')
-        book=job.read_book(first['uri'])
+        book=job.read_book(first['member'])
         report('OpenITI full official installation and local search: installed=true, processed=%d/%d, skipped=%d, partial=%s, matches=%d, first=%s, saved_book_characters=%d' % (state['processed'],state['total'],state['skipped'],state['partial'],len(state['results']),first['uri'],len(book['text'])))
 except Exception as exc:
     report('OpenITI full installation or search unavailable: %s %s' % (type(exc).__name__,str(exc)[:180]))

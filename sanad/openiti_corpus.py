@@ -46,11 +46,20 @@ def metadata_map(data):
         out={}
         for row in reader:
             uri=row.get('version_uri','')
-            if not re.fullmatch(r'[A-Za-z0-9_.-]{1,250}',uri) or uri in out:continue
+            if not re.fullmatch(r'[A-Za-z0-9_.-]{1,500}',uri) or uri in out:continue
             out[uri]={k:(row.get(k) or '')[:500] for k in required}
         if not out:raise ValueError('بيانات OpenITI فارغة')
         return out
     except (UnicodeError,csv.Error) as exc:raise ValueError('تعذر قراءة بيانات OpenITI') from exc
+
+def member_metadata(metadata,name):
+    # Some primary ZIP members carry a status suffix not present in version_uri.
+    key=name
+    if key not in metadata:
+        for suffix in ('.completed','.mARkdown','.inProgress','.automARkdown'):
+            if name.endswith(suffix) and name[:-len(suffix)] in metadata:
+                key=name[:-len(suffix)];break
+    return key,metadata.get(key) or {'title_ar':'','title_lat':'','author_ar':'','author_lat':'','ed_info':''},key not in metadata
 
 class Cancelled(Exception):pass
 
@@ -151,14 +160,13 @@ class Corpus:
         self.scan(self.zip,metadata_map(data),query,offset)
     def read_book(self,uri):
         if not self.installed():raise ValueError('المجموعة غير مثبتة')
-        if not isinstance(uri,str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,250}',uri):raise ValueError('معرّف النسخة غير صالح')
+        if not isinstance(uri,str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,500}',uri):raise ValueError('معرّف النسخة غير صالح')
         data=self.meta.read_bytes()
         if len(data)!=META_SIZE or hashlib.md5(data).hexdigest()!=META_MD5:raise ValueError('بيانات المجموعة تالفة')
-        item=metadata_map(data).get(uri)
-        if not item:raise ValueError('النسخة غير موجودة في بيانات الإصدار')
+        member=uri;uri,item,metadata_missing=member_metadata(metadata_map(data),member)
         try:
             with zipfile.ZipFile(self.zip) as z:
-                info=z.getinfo(uri)
+                info=z.getinfo(member)
                 if info.file_size>16*1024*1024 or info.is_dir() or info.flag_bits&1:raise ValueError('النص أكبر من 16 ميجابايت أو غير متاح للحفظ؛ استخدم المقتطفات أو افتح المصدر')
                 with z.open(info) as f:raw=f.read(16*1024*1024+1)
         except KeyError as exc:raise ValueError('النسخة غير موجودة في الأرشيف') from exc
@@ -166,7 +174,7 @@ class Corpus:
         if not raw or len(raw)>16*1024*1024:raise ValueError('حجم النص غير صالح')
         try:text=raw.decode('utf-8-sig')
         except UnicodeError as exc:raise ValueError('ترميز النسخة غير مدعوم') from exc
-        return {'uri':uri,'text':text,'title':item['title_ar'] or item['title_lat'] or uri,'author':item['author_ar'] or item['author_lat'],'edition':item['ed_info'],'url':DATASET,'warning':WARNING}
+        return {'uri':uri,'member':member,'metadata_missing':metadata_missing,'text':text,'title':item['title_ar'] or item['title_lat'] or uri,'author':item['author_ar'] or item['author_lat'],'edition':item['ed_info'],'url':DATASET,'warning':WARNING}
 
     def scan(self,archive,metadata,query,offset=0):
         needle=normalize(query);self._update(stage='searching',query=query)
@@ -175,9 +183,9 @@ class Corpus:
             entries=[x for x in z.infolist() if not x.is_dir()];total=len(entries);self._update(total=total)
             for info in entries:
                 self._check();name=info.filename
-                if '/' in name or '\\' in name or name not in metadata or info.file_size>512*1024*1024 or info.flag_bits&1:
+                if not re.fullmatch(r'[A-Za-z0-9_.-]{1,500}',name) or info.file_size>512*1024*1024 or info.flag_bits&1:
                     skipped+=1;count+=1;self._update(processed=count,skipped=skipped);continue
-                m=metadata[name];line_base=1;overlap='';last_offset=-1;position=0;book_hits=0
+                uri,m,metadata_missing=member_metadata(metadata,name);line_base=1;overlap='';last_offset=-1;position=0;book_hits=0
                 try:
                     with z.open(info) as raw,io.TextIOWrapper(raw,encoding='utf-8-sig',errors='strict') as stream:
                         while True:
@@ -197,7 +205,7 @@ class Corpus:
                                 start=max(0,idx-250);snippet=('…' if start else '')+combined[start:start+1000]+('…' if len(combined)>start+1000 else '')
                                 seen+=1
                                 if seen>offset:
-                                    matches.append({'uri':name,'title':m['title_ar'] or m['title_lat'] or name,'author':m['author_ar'] or m['author_lat'],'edition':m['ed_info'],'location':f'السطر التقريبي {line} في نص OpenITI الخام','excerpt':snippet,'url':DATASET})
+                                    matches.append({'uri':uri,'member':name,'metadata_missing':metadata_missing,'title':m['title_ar'] or m['title_lat'] or uri,'author':m['author_ar'] or m['author_lat'],'edition':m['ed_info'],'location':f'السطر التقريبي {line} في نص OpenITI الخام','excerpt':snippet,'url':DATASET})
                                     self._update(results=list(matches))
                                 last_offset=absolute;book_hits+=1
                                 break

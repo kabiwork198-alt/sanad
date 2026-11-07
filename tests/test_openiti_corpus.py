@@ -61,6 +61,17 @@ class CorpusTests(unittest.TestCase):
     def test_cancel_does_not_replace_existing_data(self):
         self.c.cancel_event.set()
         with self.assertRaises(c.Cancelled):self.c.scan(io.BytesIO(self.zip),c.metadata_map(self.meta),'بغداد')
+    def test_archive_status_suffix_and_missing_metadata(self):
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,'w',zipfile.ZIP_DEFLATED) as z:
+            z.writestr(U1+'.completed','بغداد مدينة')
+            z.writestr('unknown-version.mARkdown','بغداد مدينة')
+        self.c.scan(io.BytesIO(buf.getvalue()),c.metadata_map(self.meta),'بغداد');results=self.c.status()['results']
+        self.assertEqual(len(results),2);self.assertEqual(results[0]['uri'],U1);self.assertEqual(results[0]['member'],U1+'.completed');self.assertEqual(results[0]['title'],'كتاب أول');self.assertTrue(results[1]['metadata_missing'])
+        self.c.root.mkdir(parents=True);self.c.zip.write_bytes(buf.getvalue());self.c.meta.write_bytes(self.meta)
+        with mock.patch.object(self.c,'installed',return_value=True):
+            self.assertEqual(self.c.read_book(U1+'.completed')['uri'],U1)
+            self.assertTrue(self.c.read_book('unknown-version.mARkdown')['metadata_missing'])
     def test_overlap_match_does_not_mask_new_hit(self):
         # The old match falls in the 512-character overlap; the next hit is new.
         raw=('x'*(65536-5)+'بغداد'+'z'*400+'بغداد').encode()
