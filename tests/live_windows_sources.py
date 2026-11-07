@@ -3,7 +3,7 @@ import concurrent.futures
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sanad import catalogs, openiti, shamela, internet_archive, turath
+from sanad import catalogs, openiti, shamela, internet_archive, turath, alexandria_archive
 
 def wiki():
     page = catalogs.read_wikisource('43576')
@@ -27,6 +27,14 @@ def turath_live():
     if not page['text'].strip(): raise ValueError('Selected page unavailable')
     return f"results={len(results)}; selected page read; book={results[0]['book_id']}; page_id={results[0]['page_id']}"
 
+def alexandria_live():
+    results=alexandria_archive.search('Alexandria')['results']
+    article=next((x for x in results if x['url'].startswith('https://www.alexandria-archive.com/article/')),None)
+    if not article: raise ValueError('No public article result')
+    page=alexandria_archive.read_article(article['url'].rsplit('/',1)[-1])
+    if not page['text'] or 'نبذة عامة' not in page['warning']: raise ValueError('No public preview')
+    return f"results={len(results)}; public preview read; article={article['url'].rsplit('/',1)[-1]}"
+
 def check(name, fn):
     try:
         value = fn()
@@ -39,6 +47,7 @@ checks = [
     ('Wikisource selected revision', wiki),
     ('Official Shamela MCP and page', shamela_live),
     ('Turath MCP and selected page', turath_live),
+    ('Alexandria Archive MCP and preview', alexandria_live),
     ('OpenITI index history search', lambda: f"matches={openiti.search('تاريخ الطبري')['total']}"),
     ('OpenITI selected text', lambda: f"characters={len(openiti.read_text('data/0370CaribQurtubi/0370CaribQurtubi.SilaTarikhTabari/0370CaribQurtubi.SilaTarikhTabari.JK011178-ara1.completed')['text'])}"),
     ('DOAJ Baghdad', lambda: catalogs.doaj('Baghdad')),

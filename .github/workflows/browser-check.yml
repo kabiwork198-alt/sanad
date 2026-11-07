@@ -38,6 +38,10 @@ jobs:
         run: node tests/check_live_services.cjs
       - name: Install browser test driver
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
+      - name: Diagnose Alexandria MCP real browser initialization
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_alexandria_browser.cjs
+      - name: Test Alexandria MCP local UI
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_alexandria.py
       - name: Diagnose Turath MCP real browser initialization
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_turath_browser.cjs
       - name: Probe Internet Archive text access in a browser

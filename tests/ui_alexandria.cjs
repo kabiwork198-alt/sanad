@@ -1,0 +1,12 @@
+// Exercise the real local application with deterministic official-MCP responses.
+const puppeteer=require('puppeteer-core');
+(async()=>{let browser;try{
+ browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+ const page=await browser.newPage(),errors=[];let accept=true,calls=0;page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>accept?d.accept(d.type()==='prompt'?'الإسكندرية':undefined):d.dismiss());await page.setViewport({width:390,height:844,isMobile:true});page.on('request',r=>{if(r.url().includes('/api/alexandria/'))calls++});
+ await page.goto(process.env.SANAD_TEST_ORIGIN,{waitUntil:'load'});await page.click('#empty-new');await page.click('[data-tab="research"]');
+ accept=false;await page.click('#alex-search');if(calls)throw Error('search sent without consent');accept=true;await page.click('#alex-search');await page.waitForSelector('[data-alex-result="0"]');await page.click('[data-alex-result="0"]');await page.click('[data-tab="sources"]');
+ let source=await page.evaluate(()=>current.sources[0]);if(source.url!=='https://www.alexandria-archive.com/article/2')throw Error('search provenance missing');
+ accept=false;await page.click('[data-alex-read="0"]');if(calls!==1)throw Error('read sent without consent');accept=true;await page.click('[data-alex-read="0"]');await page.waitForSelector('[data-local-search="0"]');await page.type('[data-local-query="0"]','نبذة عامة للمراجعة');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
+ source=await page.evaluate(()=>current.sources[0]);if(!source.fileId||source.author!=='المؤلف'||!source.notes.includes('حقوق محفوظة')||!source.notes.includes('ليست المقال الكامل'))throw Error('preview attribution, rights or status missing');
+ await page.click('#save');await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="sources"]');await page.type('[data-local-query="0"]','نبذة عامة للمراجعة');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');if(errors.length)throw Error(errors.join('; '));console.log('PASS: Alexandria consent, public preview, attribution, rights and persistence');
+ }finally{if(browser)await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});
