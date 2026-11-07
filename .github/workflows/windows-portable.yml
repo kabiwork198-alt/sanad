@@ -77,7 +77,7 @@ jobs:
               Write-Output $output
               if ($code -ne 0) {
                 $escaped = $output.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-                Write-Output "::error title=Bundled UI test failed: $file::$escaped"
+                Write-Output "::error title=Bundled UI test failed: ${file}::$escaped"
                 throw "Bundled UI test failed: $file"
               }
             }
