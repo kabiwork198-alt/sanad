@@ -1,7 +1,8 @@
 """Opt-in expensive diagnostic: install the exact official 2.86 GB release
 and search it. No corpus content is committed or uploaded as an artifact.
 """
-import tempfile, time, zipfile
+import os, sys, tempfile, time, zipfile
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sanad import openiti_corpus
 report=lambda msg:print('::notice file=tests/diagnose_full_openiti.py,line=1::'+msg,flush=True)
 def wait(job,limit):
