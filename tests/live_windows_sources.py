@@ -3,7 +3,7 @@ import concurrent.futures
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sanad import catalogs, openiti, shamela, internet_archive
+from sanad import catalogs, openiti, shamela, internet_archive, turath
 
 def wiki():
     page = catalogs.read_wikisource('43576')
@@ -20,6 +20,13 @@ def shamela_live():
         raise ValueError('Selected page unavailable')
     return f"results={len(results)}; selected page read; book={first['book_id']}; page={first['page_id']}"
 
+def turath_live():
+    results=turath.search('فتح بغداد')['results']
+    if not results: raise ValueError('No example results')
+    page=turath.read_page(results[0]['book_id'],results[0]['page_id'])
+    if not page['text'].strip(): raise ValueError('Selected page unavailable')
+    return f"results={len(results)}; selected page read; book={results[0]['book_id']}; page_id={results[0]['page_id']}"
+
 def check(name, fn):
     try:
         value = fn()
@@ -31,6 +38,7 @@ checks = [
     ('Internet Archive sample OCR', lambda: f"characters={len(internet_archive.read_text('frenchenglishmed00gorduoft')['text'])}"),
     ('Wikisource selected revision', wiki),
     ('Official Shamela MCP and page', shamela_live),
+    ('Turath MCP and selected page', turath_live),
     ('OpenITI index history search', lambda: f"matches={openiti.search('تاريخ الطبري')['total']}"),
     ('OpenITI selected text', lambda: f"characters={len(openiti.read_text('data/0370CaribQurtubi/0370CaribQurtubi.SilaTarikhTabari/0370CaribQurtubi.SilaTarikhTabari.JK011178-ara1.completed')['text'])}"),
     ('DOAJ Baghdad', lambda: catalogs.doaj('Baghdad')),

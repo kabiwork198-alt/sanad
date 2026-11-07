@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
 
-from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive
+from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -295,6 +295,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, catalogs.read_wikisource(body.get('page_id', '')))
             if path == '/api/internet-archive/read':
                 return self.send(200, internet_archive.read_text(body.get('identifier', '')))
+            if path == '/api/turath/search':
+                return self.send(200, turath.search(body.get('query', '')))
+            if path == '/api/turath/read':
+                return self.send(200, turath.read_page(body.get('book_id', ''), body.get('page_id', '')))
             if path == '/api/shamela/search':
                 return self.send(200, shamela.search(body.get('query', '')))
             if path == '/api/shamela/read':

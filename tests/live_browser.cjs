@@ -72,6 +72,17 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
     report('Internet Archive live UI: public OCR downloaded, checksum checked when present, provenance retained and phrase found locally');
   } catch(e) {const state=await page.evaluate(()=>document.querySelector('#toast')?.textContent);report('Internet Archive live UI unavailable: '+String(e.message).slice(0,100)+' '+state);}
 
+  // Turath official MCP: consented search and one selected page in a real browser.
+  try {
+    await page.click('[data-tab="research"]');await page.$eval('#turath-query',e=>e.value='فتح بغداد');await page.click('#turath-search');
+    await page.waitForFunction(()=>typeof turathResult!=='undefined'&&turathResult!==null,{timeout:100000});
+    const result=await page.evaluate(()=>turathResult);if(result.error)throw Error(result.error);if(!result.results?.length)throw Error('No sample results');
+    await page.click('[data-turath-result="0"]');const index=await page.evaluate(()=>current.sources.length-1);await page.click('[data-tab="sources"]');await page.click(`[data-turath-read="${index}"]`);
+    await page.waitForSelector(`[data-local-search="${index}"]`,{timeout:100000});const source=await page.evaluate(i=>current.sources[i],index);
+    if(!source.fileId||!source.notes.includes('صفحة تراث'))throw Error('Page or provenance not saved');
+    report('Turath live UI: MCP search and selected page succeeded in real browser, stored locally with citation provenance');
+  } catch(e) {const toast=await page.evaluate(()=>document.querySelector('#toast')?.textContent);report('Turath live UI unavailable: '+String(e.message).slice(0,140)+' '+toast);}
+
   // Public pinned OpenITI index is fetched by the real browser only with consent.
   try {
     await page.click('[data-tab="research"]');

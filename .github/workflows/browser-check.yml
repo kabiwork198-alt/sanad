@@ -42,6 +42,10 @@ jobs:
         run: |
           NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_archive.cjs
           NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_archive.py
+      - name: Test Turath MCP UI in browser and local app
+        run: |
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_turath.cjs
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_turath.py
       - name: Test Wikisource import and search in a mobile browser
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_wikisource.cjs
       - name: Test manual source workflow and responsive navigation

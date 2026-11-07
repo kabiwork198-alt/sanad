@@ -222,6 +222,48 @@ window.SANAD_BROWSER = true;
     if(!text.trim()||text.includes('\0'))throw Error('لم يُرجع الموقع نص OCR صالحًا');
     return {text,filename:file.name,url:'https://archive.org/details/'+id,file_url:'https://archive.org/download/'+id+'/'+encoded,sha1,warning:'نص OCR آلي قد يحتوي أخطاء أو ينقصه سياق، ورقم السطر ليس صفحة الطبعة. الإتاحة لا تثبت حق إعادة الاستخدام؛ راجع حقوق المادة وطابق الاقتباس مع صور الأصل.'};
   }
+  // Turath advertises read-only, bounded tools. No cookies or third-party proxy.
+  async function turathCall(tool,args){
+    let session='';
+    async function rpc(method,params,id){
+      const body={jsonrpc:'2.0',method,params};if(id!==undefined)body.id=id;
+      const headers={'Content-Type':'application/json','Accept':'application/json, text/event-stream'};if(session)headers['Mcp-Session-Id']=session;
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);let size=0,chunks=[];
+      try{
+        const r=await fetch('https://mcp.turath.io/mcp/',{method:'POST',headers,body:JSON.stringify(body),signal:controller.signal,credentials:'omit',redirect:'error'});
+        if(r.status===429)throw Error('بلغت حد طلبات تراث؛ حاول لاحقًا');if(!r.ok)throw Error('تعذر اتصال تراث (HTTP '+r.status+')');
+        session=r.headers.get('mcp-session-id')||session;if(session&&!/^[A-Za-z0-9._~+\-/=]{1,256}$/.test(session))throw Error('معرّف جلسة تراث غير صالح');
+        if(id===undefined&&(r.status===202||r.status===204))return {};
+        if(Number(r.headers.get('content-length')||0)>2000000)throw Error('استجابة تراث أكبر من الحد الآمن');
+        if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const p=await reader.read();if(p.done)break;size+=p.value.length;if(size>2000000){await reader.cancel();throw Error('استجابة تراث أكبر من الحد الآمن')}chunks.push(p.value)}}finally{reader.releaseLock()}}
+        else{const p=new Uint8Array(await r.arrayBuffer());size=p.length;if(size>2000000)throw Error('استجابة تراث أكبر من الحد الآمن');chunks=[p]}
+        if(id===undefined&&!size)return {};const all=new Uint8Array(size);let off=0;for(const p of chunks){all.set(p,off);off+=p.length}
+        let obj;try{let text=new TextDecoder('utf-8',{fatal:true}).decode(all);if((r.headers.get('content-type')||'').includes('text/event-stream'))text=(text.split('\n').find(l=>l.startsWith('data:'))||'').slice(5).trim();obj=JSON.parse(text)}catch{throw Error('تعذر قراءة استجابة تراث')}
+        if(!obj||obj.id!==id||obj.error||!obj.result)throw Error('تعذر تنفيذ طلب تراث أو تغيرت الواجهة');return obj.result;
+      }catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة اتصال تراث');if(e instanceof TypeError)throw Error('تعذر الاتصال بتراث أو حظر المتصفح الاستجابة');throw e}finally{clearTimeout(timer)}
+    }
+    const init=await rpc('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'SanadStudio',version:'1.0'}},1);if(!init.protocolVersion)throw Error('تعذر بدء جلسة تراث');
+    await rpc('notifications/initialized',{},undefined);
+    const result=await rpc('tools/call',{name:tool,arguments:args},2);if(result.isError||!Array.isArray(result.content))throw Error('تعذر تنفيذ بحث تراث');
+    let data;try{data=JSON.parse(result.content.find(x=>x.type==='text'&&typeof x.text==='string')?.text)}catch{throw Error('صيغة استجابة تراث غير مدعومة')}
+    if(!data||typeof data!=='object'||Array.isArray(data))throw Error('صيغة استجابة تراث غير مدعومة');return data;
+  }
+  async function searchTurath(q){
+    if(typeof q!=='string'||q.trim().length<2||q.trim().length>300)throw Error('أدخل عبارة من حرفين إلى 300 حرف');q=q.trim();
+    const data=await turathCall('search_turath',{q,page:1});if(!Array.isArray(data.results))throw Error('صيغة نتائج تراث غير مدعومة');const seen=new Set(),results=[];
+    for(const item of data.results.slice(0,50)){const meta=item?.meta||{},book=item?.book_id,page=meta.page_id;
+      if(!Number.isSafeInteger(book)||!Number.isSafeInteger(page)||book<=0||page<=0||book>999999999||page>999999999||seen.has(book+':'+page))continue;seen.add(book+':'+page);
+      const vol=String(meta.vol||'').slice(0,30),printed=String(meta.page||'').slice(0,30),snippet=typeof item.snip==='string'?item.snip.slice(0,700):'';
+      results.push({title:String(meta.book_name||'بلا عنوان').slice(0,300),author:String(meta.author_name||'').slice(0,300),url:'https://app.turath.io/book/'+book+'?page='+page,book_id:String(book),page_id:String(page),detail:'المجلد بحسب تراث: '+(vol||'غير معروف')+'؛ الصفحة بحسب تراث: '+(printed||'غير معروفة')+'. معاينة بحث: '+snippet,access:'بحث في تراث؛ المعاينة غير كافية للاستشهاد. افتح صفحة المصدر وراجع السياق والطبعة والحقوق.'});if(results.length>=20)break;
+    }
+    return {query:q,results,warning:'نتائج الصفحة الأولى فقط وقد تكون ناقصة؛ افتح الصفحة الأصلية وراجع السياق والطبعة والحقوق قبل الاستشهاد.'};
+  }
+  async function readTurath(bookId,pageId){
+    if(![bookId,pageId].every(x=>typeof x==='string'&&/^[1-9][0-9]{0,8}$/.test(x)))throw Error('معرّف كتاب أو صفحة تراث غير صالح');
+    const book=Number(bookId),page=Number(pageId),data=await turathCall('get_page',{book_id:book,page_id:page}),text=data.text;
+    if(data.book_id!==book||data.page_id!==page||typeof text!=='string'||!text.trim()||new TextEncoder().encode(text).length>1800000)throw Error('صفحة تراث غير متاحة أو جاءت استجابتها غير متوقعة');
+    const meta=data.meta||{};return {text,url:'https://app.turath.io/book/'+book+'?page='+page,volume:String(meta.vol||'').slice(0,30),printed_page:String(meta.page||'').slice(0,30),warning:'نص صفحة واحدة من تراث وقد يحتوي أخطاء أو حواشي. معرّف الصفحة الداخلي ليس رقم صفحة الطبعة؛ تحقق من موضع الصفحة والسياق والطبعة والحقوق في المصدر.'};
+  }
   // The upstream metadata snapshot is downloaded only after explicit user action.
   const openitiRevision='cfc4157a3cf2054c0888f133970a4eaa3e22e58c';
   const openitiURL='https://raw.githubusercontent.com/OpenITI/RELEASE/'+openitiRevision+'/metadata/OpenITI_metadata_2025-1-9.tsv';
@@ -346,6 +388,8 @@ window.SANAD_BROWSER = true;
     if(path==='/api/save'){validate(data.project);const items=projects().filter(x=>x.id!==data.project.id);items.unshift(data.project);writeProjects(items);return {ok:true};}
     if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
     if(path==='/api/topics')return topics();
+    if(path==='/api/turath/search')return searchTurath(data.query);
+    if(path==='/api/turath/read')return readTurath(data.book_id,data.page_id);
     if(path==='/api/internet-archive/read')return readInternetArchive(data.identifier);
     if(path==='/api/wikisource/read')return readWikisource(data.page_id);
     if(path==='/api/openiti/read')return readOpeniti(data.path);
