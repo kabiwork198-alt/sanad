@@ -19,6 +19,7 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
   const page=await browser.newPage(), errors=[];
   page.on('pageerror',err=>errors.push(err.message));
+  const locEvents=[];page.on('response',res=>{if(res.url().startsWith('https://www.loc.gov/collections/'))locEvents.push('HTTP '+res.status())});page.on('requestfailed',req=>{if(req.url().startsWith('https://www.loc.gov/collections/'))locEvents.push(req.failure()?.errorText||'failed')});
   page.on('dialog',dialog=>dialog.accept(dialog.type()==='prompt'?'الخوارزمي':undefined));
   await page.setViewport({width:390,height:844,isMobile:true});
   await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'load'});
@@ -28,12 +29,13 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   await page.click('#empty-new');await page.click('[data-tab="research"]');await page.click('#research-search');
   await page.waitForFunction(()=>typeof researchResult!=='undefined'&&researchResult!==null,{timeout:45000});
   const result=await page.evaluate(()=>researchResult);
-  for(const p of result.providers)report('Browser '+p.provider+': '+p.status+' / '+p.count);
+  for(const p of result.providers.filter(p=>p.provider==='المكتبة الرقمية العالمية'||p.provider==='صحف Chronicling America'))report('Browser Arabic '+p.provider+': '+p.status+' / '+p.count);
   report('Browser visible result cards: '+(await page.$$('[data-research-result]')).length);
   await page.$eval('#research-query',e=>e.value='');await page.type('#research-query','Baghdad');await page.click('#research-search');
   await page.waitForFunction(()=>typeof researchResult!=='undefined'&&researchResult?.query==='Baghdad',{timeout:45000});
   const archives=await page.evaluate(()=>researchResult.providers.filter(p=>p.provider==='المكتبة الرقمية العالمية'||p.provider==='صحف Chronicling America'));
   for(const p of archives)report('Browser Baghdad '+p.provider+': '+p.status+' / '+p.count);
+  report('Browser LOC requests: '+locEvents.join(', '));
   if(errors.length)throw Error('Browser script errors: '+errors.join('; '));
  }finally{if(browser)await browser.close();server.close()}
 })().catch(err=>{console.error(err);process.exitCode=1});
