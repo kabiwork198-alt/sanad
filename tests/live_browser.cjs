@@ -50,15 +50,15 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   // Exercise the actual UI: a selected public Wikisource page is downloaded, stored,
   // searched locally and linked to a fixed revision. The page may itself be partial.
   try {
-    await page.evaluate(()=>current.sources.push({id:crypto.randomUUID().replaceAll('-',''),title:'تاريخ الطبري/الجزء العاشر',author:'',url:'https://ar.wikisource.org/?curid=43576',access:'',notes:''}));
-    await page.click('[data-tab="sources"]');await page.click('[data-wiki-read="0"]');
-    await page.waitForSelector('[data-local-search="0"]',{timeout:25000});
-    await page.type('[data-local-query="0"]','الاثنين');await page.click('[data-local-search="0"]');
+    const index=await page.evaluate(()=>{current.sources.push({id:crypto.randomUUID().replaceAll('-',''),title:'تاريخ الطبري/الجزء العاشر',author:'',url:'https://ar.wikisource.org/?curid=43576',access:'',notes:''});document.querySelector('[data-tab="sources"]').click();return current.sources.length-1});
+    await page.click(`[data-wiki-read="${index}"]`);
+    await page.waitForSelector(`[data-local-search="${index}"]`,{timeout:25000});
+    await page.type(`[data-local-query="${index}"]`,'الاثنين');await page.click(`[data-local-search="${index}"]`);
     await page.waitForSelector('[data-match="0"]',{timeout:10000});
-    const check=await page.evaluate(()=>({note:current.sources[0].notes,match:fileMatches.matches[0].text}));
+    const check=await page.evaluate(i=>({note:current.sources[i].notes,match:fileMatches.matches[0].text}),index);
     if(!check.note.includes('oldid=')||!check.match.includes('الاثنين'))throw Error('revision or match missing');
     report('Wikisource live UI: selected public revision saved, searched locally, match and revision link present');
-  } catch(e) {report('Wikisource live UI unavailable: '+e.message.slice(0,150));}
+  } catch(e) {const state=await page.evaluate(()=>({tab,toast:document.querySelector('#toast')?.textContent,sourceCount:current?.sources.length,wikiButtons:document.querySelectorAll('[data-wiki-read]').length}));report('Wikisource live UI unavailable: '+e.message.slice(0,100)+' '+JSON.stringify(state));}
 
   if(errors.length)throw Error('Browser script errors: '+errors.join('; '));
  }finally{if(browser)await browser.close();server.close()}
