@@ -20,6 +20,11 @@ try:
     parsed=c.metadata_map(metadata);remote=BufferedRemote();uris=['1356MustafaSadiqRafici.TarikhAdabCarab.Shamela0010548-ara1','0479IbnFaddalQayruwani.NukatFiQuran.Shamela0009066-ara1']
     buffer=io.BytesIO()
     with zipfile.ZipFile(remote) as source,zipfile.ZipFile(buffer,'w',zipfile.ZIP_DEFLATED) as out:
+        infos=[x for x in source.infolist() if not x.is_dir()]
+        missing=[x.filename for x in infos if x.filename not in parsed]
+        huge=[x.filename for x in infos if x.file_size>512*1024*1024]
+        unusual=[x.filename for x in infos if '/' in x.filename or chr(92) in x.filename or x.flag_bits&1]
+        print('::notice file=tests/live_openiti_corpus.py,line=1::OpenITI ZIP metadata coverage: archive=%d missing_metadata=%d huge=%d unusual=%d; missing examples=%s' % (len(infos),len(missing),len(huge),len(unusual),repr(missing[:4])))
         for uri in uris:
             assert uri in parsed
             raw=source.read(uri)
