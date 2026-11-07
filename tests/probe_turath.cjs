@@ -17,5 +17,9 @@ const base='https://mcp.turath.io/mcp/',notice=s=>console.log('::notice file=tes
   const ack=await rpc('notifications/initialized',{},undefined);notice('Turath initialized HTTP '+ack.status);
   const list=await rpc('tools/list',{},2);notice('Turath tools status '+list.status);
   for(const t of list.data?.result?.tools||[])notice('Turath tool '+JSON.stringify({name:t.name,description:t.description,inputSchema:t.inputSchema}));
+  const result=await rpc('tools/call',{name:'search_turath',arguments:{q:'فتح بغداد',page:1}},3);
+  let content=result.data?.result?.content||[];let parsed;
+  try{parsed=JSON.parse(content.find(x=>x.type==='text')?.text)}catch{}
+  notice('Turath search raw structure '+JSON.stringify({status:result.status,isError:result.data?.result?.isError,keys:Object.keys(parsed||{}),contentTypes:content.map(x=>x.type),structuredKeys:Object.keys(result.data?.result?.structuredContent||{}),first:JSON.stringify(parsed).slice(0,2500)}));
  }catch(e){notice('Turath unavailable: '+e.name+': '+e.message)}
 })();
