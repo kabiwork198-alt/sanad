@@ -71,6 +71,8 @@ jobs:
             $env:CHROME_BIN = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
             $env:SANAD_TEST_ORIGIN = 'http://127.0.0.1:8765/'
             $env:SANAD_TEST_PYTHON = (Get-Command python).Source
+            node tests/ui_history.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled executable historical citation and local search test failed.' }
             node tests/ui_research_expanded.cjs
             if ($LASTEXITCODE -ne 0) { throw 'Bundled executable multi-query research test failed.' }
             node tests/ui_ocr_batch.cjs
@@ -95,4 +97,4 @@ jobs:
             dist/Sanad-Studio.exe
             dist/README.txt
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90

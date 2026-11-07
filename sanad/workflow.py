@@ -52,10 +52,12 @@ def analyze(project):
                 issues.append(f'الادعاء {i}: يوجد دليل مخالف سجله المستخدم؛ راجع الخلاف ولا تحذفه من المعالجة.')
             comparisons.append({'source': (cited or {}).get('title', '').strip() or 'مصدر غير محدد',
                                 'location': evidence.get('location', '').strip() or 'موضع غير محدد',
+                                'printedPage': evidence.get('printedPage', '').strip(),
+                                'edition': (cited or {}).get('edition', '').strip(),
                                 'stance': evidence.get('stance', 'غير محسوم'),
                                 'excerpt': evidence.get('excerpt', '').strip(), 'notes': evidence.get('notes', '').strip()})
         if text and status == 'مدعوم' and source and source.get('title', '').strip() and claim.get('location', '').strip():
-            ready.append({'text': text, 'source': source['title'].strip(), 'location': claim['location'].strip(), 'notes': claim.get('notes', '').strip(), 'comparisons': comparisons})
+            ready.append({'text': text, 'source': source['title'].strip(), 'location': claim['location'].strip(), 'printedPage': claim.get('printedPage', '').strip(), 'edition': source.get('edition', '').strip(), 'notes': claim.get('notes', '').strip(), 'comparisons': comparisons})
     return {'issues': issues, 'reviewed_claims': ready, 'counts': {'signals': len(signals), 'sources': len(sources), 'claims': len(claims), 'reviewed': len(ready)}, 'warning': 'الفحص تنظيمي فقط؛ لا يثبت صحة الادعاءات أو الاستشهادات، ولا يغني عن مراجعة المصادر والخلافات والحقوق بشريًا.'}
 
 
@@ -69,10 +71,14 @@ def script_draft(project):
     lines.extend(['', 'المتن:'])
     for index, claim in enumerate(report['reviewed_claims'], 1):
         lines.extend([f'{index}. {claim["text"]}', f'   [مرجع للمراجعة: {claim["source"]}، {claim["location"]}]'])
+        if claim['edition'] or claim['printedPage']:
+            lines.append(f'   [الطبعة والصفحة المطبوعة كما أدخل الباحث: {claim["edition"] or "غير محددة"}، {claim["printedPage"] or "غير محددة"}]')
         if claim['notes']:
             lines.append(f'   [ملاحظات الباحث للمراجعة وليست للتعليق الصوتي: {claim["notes"]}]')
         for evidence in claim['comparisons']:
             lines.append(f'   [دليل إضافي كما سجّله المستخدم: {evidence["stance"]} — {evidence["source"]}، {evidence["location"]}]')
+            if evidence['edition'] or evidence['printedPage']:
+                lines.append(f'   [الطبعة والصفحة المطبوعة كما أدخل الباحث: {evidence["edition"] or "غير محددة"}، {evidence["printedPage"] or "غير محددة"}]')
             if evidence['excerpt']:
                 lines.append(f'   [نص للمطابقة مع الأصل: {evidence["excerpt"]}]')
             if evidence['notes']:

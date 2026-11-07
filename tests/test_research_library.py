@@ -45,6 +45,18 @@ class LibraryTest(unittest.TestCase):
         self.assertIn('للتجربة', result['matches'][0]['text'])
         self.assertTrue((self.root / 'library' / (doc['id'] + '.bin')).exists())
 
+    def test_optional_arabic_spelling_variants_and_provenance(self):
+        for header in ('', '#SANAD-OCR-TEXT-1\n#SANAD-PAGE:7\n| ', '######OpenITI#\n~~'):
+            content = (header + 'ا'*1200 + ' أحمد بن يحيى وابتداء الأمر').encode('utf-8')
+            doc = library.import_document(self.root, 'names.txt', base64.b64encode(content).decode())
+            self.assertFalse(library.search_document(self.root, doc['id'], 'احمد بن يحيي')['matches'])
+            result = library.search_document(self.root, doc['id'], 'احمد بن يحيي', 'arabic-variants')
+            self.assertEqual(result['match_mode'], 'arabic-variants')
+            self.assertIn('أحمد بن يحيى', result['matches'][0]['text'])
+            self.assertIn('أسماء مختلفة', result['warning'])
+            if header.startswith('#SANAD-OCR'): self.assertIn('PDF 7', result['matches'][0]['location'])
+        with self.assertRaises(ValueError): library.search_document(self.root, doc['id'], 'احمد', 'bogus')
+
     def test_mineru_imported_pages_search_and_marker_escape(self):
         text = '#SANAD-MINERU-TEXT-1\n#SANAD-PAGE:1\n| Baghdad historical archive\n| #SANAD-PAGE:999\n#SANAD-PAGE:2\n| Sources require careful review.\n'
         doc = library.import_document(self.root, 'mineru.txt', base64.b64encode(text.encode()).decode())

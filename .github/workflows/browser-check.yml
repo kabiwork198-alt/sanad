@@ -18,13 +18,16 @@ jobs:
       - run: node --check web/browser-engine.js
       - run: node --check web/mineru-import.js
       - run: node --check web/research-planner.js
+      - run: node --check web/ocr-journal.js
+      - run: node --check web/history-dates.js
+      - run: node tests/test_history_dates.cjs
       - run: node tests/test_research_planner.cjs
       - run: node tests/test_mineru_import.cjs
       - run: node tests/test_browser_engine.cjs
       - run: node tests/test_archive_browser.cjs
   live-service-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,6 +58,8 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_ocr_scan.py
       - name: Test offline multipage Arabic and English PDF OCR
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_ocr_batch.py
+      - name: Test Hijri estimates, local name variants and printed citations in both modes
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_history.py
       - name: Test multi-query research UI in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_research_expanded.py
       - name: Test real local research HTTP API with mocked providers

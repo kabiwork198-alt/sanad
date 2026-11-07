@@ -7,10 +7,10 @@ window.SANAD_BROWSER = true;
   const MAX_PAGES = 300;
   const MAX_MATCHES = 12;
   const trim = x => String(x ?? '').trim();
-  const normalize = s => String(s).normalize('NFKC').toLocaleLowerCase().replace(/[\p{M}\u0640]/gu, '');
-  function excerpt(text, needle) {
-    const at=normalize(text).indexOf(needle);let pos=0,original=0;
-    if(at>=0){for(const char of text){pos+=normalize(char).length;if(pos>at)break;original+=char.length}}
+  const normalize = (s,mode='basic') => {const value=String(s).normalize('NFKC').toLocaleLowerCase().replace(/[\p{M}\u0640]/gu, '');return mode==='arabic-variants'?value.replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي'):value};
+  function excerpt(text, needle, mode='basic') {
+    const at=normalize(text,mode).indexOf(needle);let pos=0,original=0;
+    if(at>=0){for(const char of text){pos+=normalize(char,mode).length;if(pos>at)break;original+=char.length}}
     const start=Math.max(0,original-250);
     return (start ? '…' : '') + text.slice(start, start + 1000) + (text.length > start + 1000 ? '…' : '');
   }
@@ -78,9 +78,9 @@ window.SANAD_BROWSER = true;
         const cited=byId.get(e.sourceId);
         if(!cited||!trim(cited.title)||!trim(e.location))issues.push(`دليل مقارنة للادعاء ${i+1}: يحتاج مصدرًا مسمى وموضعًا.`);
         if(e.stance==='يخالف')issues.push(`الادعاء ${i+1}: يوجد دليل مخالف سجله المستخدم؛ راجع الخلاف ولا تحذفه من المعالجة.`);
-        return {source:trim(cited?.title)||'مصدر غير محدد',location:trim(e.location)||'موضع غير محدد',stance:e.stance||'غير محسوم',excerpt:trim(e.excerpt),notes:trim(e.notes)};
+        return {source:trim(cited?.title)||'مصدر غير محدد',location:trim(e.location)||'موضع غير محدد',printedPage:trim(e.printedPage),edition:trim(cited?.edition),stance:e.stance||'غير محسوم',excerpt:trim(e.excerpt),notes:trim(e.notes)};
       });
-      if (trim(c.text) && status === 'مدعوم' && source && trim(source.title) && trim(c.location)) reviewed.push({text:trim(c.text),source:trim(source.title),location:trim(c.location),notes:trim(c.notes),comparisons});
+      if (trim(c.text) && status === 'مدعوم' && source && trim(source.title) && trim(c.location)) reviewed.push({text:trim(c.text),source:trim(source.title),location:trim(c.location),printedPage:trim(c.printedPage),edition:trim(source.edition),notes:trim(c.notes),comparisons});
     });
     return {issues, reviewed_claims:reviewed, counts:{signals:signals.length,sources:sources.length,claims:claims.length,reviewed:reviewed.length}, warning:'الفحص تنظيمي فقط؛ لا يثبت صحة الادعاءات أو الاستشهادات، ولا يغني عن مراجعة المصادر والخلافات والحقوق بشريًا.'};
   }
@@ -90,7 +90,7 @@ window.SANAD_BROWSER = true;
     const lines = ['مسودة تحريرية للمراجعة — ليست نصًا معتمدًا للنشر','','العنوان: '+trim(p.title),'','المقدمة:','[اكتب افتتاحية لا تعد بأكثر مما تثبته المصادر.]'];
     if (trim(p.question)) lines.push('سؤال الحلقة (صياغة المستخدم): '+trim(p.question));
     lines.push('','المتن:');
-    r.reviewed_claims.forEach((c,i) => {lines.push(`${i+1}. ${c.text}`,`   [مرجع للمراجعة: ${c.source}، ${c.location}]`);if(c.notes)lines.push(`   [ملاحظات الباحث للمراجعة وليست للتعليق الصوتي: ${c.notes}]`);for(const e of c.comparisons){lines.push(`   [دليل إضافي كما سجّله المستخدم: ${e.stance} — ${e.source}، ${e.location}]`);if(e.excerpt)lines.push(`   [نص للمطابقة مع الأصل: ${e.excerpt}]`);if(e.notes)lines.push(`   [ملاحظات المقارنة: ${e.notes}]`);}});
+    r.reviewed_claims.forEach((c,i) => {lines.push(`${i+1}. ${c.text}`,`   [مرجع للمراجعة: ${c.source}، ${c.location}]`);if(c.edition||c.printedPage)lines.push(`   [الطبعة والصفحة المطبوعة كما أدخل الباحث: ${c.edition||'غير محددة'}، ${c.printedPage||'غير محددة'}]`);if(c.notes)lines.push(`   [ملاحظات الباحث للمراجعة وليست للتعليق الصوتي: ${c.notes}]`);for(const e of c.comparisons){lines.push(`   [دليل إضافي كما سجّله المستخدم: ${e.stance} — ${e.source}، ${e.location}]`);if(e.edition||e.printedPage)lines.push(`   [الطبعة والصفحة المطبوعة كما أدخل الباحث: ${e.edition||'غير محددة'}، ${e.printedPage||'غير محددة'}]`);if(e.excerpt)lines.push(`   [نص للمطابقة مع الأصل: ${e.excerpt}]`);if(e.notes)lines.push(`   [ملاحظات المقارنة: ${e.notes}]`);}});
     lines.push('','الخاتمة:','[اكتب خلاصة متوازنة تعكس حدود الأدلة والخلافات.]','','ملاحظات للمراجع:','لا تمثل حالة «مدعوم» تحققًا آليًا. راجع نصوص المصادر والاقتباسات والسياق والخلافات قبل النشر.');
     const excluded = (p.claims || []).length-r.reviewed_claims.length;
     if (excluded) lines.push(`لم تُدرج ${excluded} من الادعاءات لأنها لم تستوفِ شروط هذه المسودة؛ راجعها ولا تُخفِ خلافًا مؤثرًا.`);
@@ -429,21 +429,22 @@ window.SANAD_BROWSER = true;
     let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
     return {id,name,size:bytes.length,content:btoa(binary)};
   }
-  async function searchDocument(id,query) {
+  async function searchDocument(id,query,mode='basic') {
+    if(!['basic','arabic-variants'].includes(mode))throw Error('نمط مطابقة البحث غير صالح');
     if(typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))throw Error('معرّف الملف غير صالح');
-    if(typeof query!=='string'||trim(query).length<2||query.length>200||!normalize(query).trim())throw Error('أدخل عبارة بحث من حرفين إلى 200 حرف');
+    if(typeof query!=='string'||trim(query).length<2||query.length>200||!normalize(query,mode).trim())throw Error('أدخل عبارة بحث من حرفين إلى 200 حرف');
     const bytes=await documentStore('readonly',id);if(!bytes)throw Error('الملف غير موجود في هذا المتصفح؛ أضفه مجددًا');
     if(!bytes.length||bytes.length>MAX_FILE)throw Error('حجم الملف المرتبط غير صالح');
     const digest=await crypto.subtle.digest('SHA-256',bytes),actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
     if(actual!==id)throw Error('ملف مرتبط تالف أو لا تطابق بصمته المعرّف');
-    const needle=normalize(query.trim()),matches=[],head=new TextDecoder().decode(bytes.slice(0,1024));let scanned=0,total=1,fileWarningForSearch=fileWarning;
+    const needle=normalize(query.trim(),mode),matches=[],head=new TextDecoder().decode(bytes.slice(0,1024));let scanned=0,total=1,fileWarningForSearch=fileWarning;
     if(head.includes('%PDF-')) {
       try {
         if(!Promise.withResolvers)Promise.withResolvers=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
         const pdf=await import('./vendor/pdf.min.mjs');
         pdf.GlobalWorkerOptions.workerSrc=new URL('web/vendor/pdf.worker.min.mjs',document.baseURI).href;
         const task=pdf.getDocument({data:bytes.slice(),isEvalSupported:false});const doc=await task.promise;total=doc.numPages;
-        for(let i=1;i<=Math.min(total,MAX_PAGES);i++){const page=await doc.getPage(i);const content=await page.getTextContent();scanned++;const line=content.items.map(x=>x.str||'').join(' ');if(normalize(line).includes(needle))matches.push({location:`صفحة PDF ${i}`,text:excerpt(line,needle)});if(matches.length>=MAX_MATCHES)break;}
+        for(let i=1;i<=Math.min(total,MAX_PAGES);i++){const page=await doc.getPage(i);const content=await page.getTextContent();scanned++;const line=content.items.map(x=>x.str||'').join(' ');if(normalize(line,mode).includes(needle))matches.push({location:`صفحة PDF ${i}`,text:excerpt(line,needle,mode)});if(matches.length>=MAX_MATCHES)break;}
         await doc.destroy();
       } catch(e) {if(e?.name==='PasswordException')throw Error('هذا الملف محمي أو مشفر؛ لا يتجاوز سَنَد الحماية. أضف نسخة مسموحة قابلة للقراءة.');throw Error('تعذر قراءة PDF؛ قد يكون تالفًا أو لا يدعمه المتصفح.');}
     } else {
@@ -453,20 +454,20 @@ window.SANAD_BROWSER = true;
         if(isMineru||isBatchOcr){
           const marker=/^#SANAD-PAGE:([1-9][0-9]{0,6})$/.exec(line);
           if(marker){paginatedPage=Number(marker[1]);continue}
-          if(paginatedPage!==null&&line.startsWith('| ')&&normalize(line.slice(2)).includes(needle))matches.push({location:`صفحة PDF ${paginatedPage} بحسب ${isMineru?'MinerU':'OCR المحلي'}؛ طابقها بالأصل`,text:excerpt(line.slice(2),needle)});
+          if(paginatedPage!==null&&line.startsWith('| ')&&normalize(line.slice(2),mode).includes(needle))matches.push({location:`صفحة PDF ${paginatedPage} بحسب ${isMineru?'MinerU':'OCR المحلي'}؛ طابقها بالأصل`,text:excerpt(line.slice(2),needle,mode)});
         }else if(isOpeniti){
           if(!line.trim()||line.startsWith('# ')||line.startsWith('### '))carry=[];
-          const cleaned=line.replace(/^~~\s?/,''),previous=carry.map(x=>x.text).join(' '),joined=(previous?previous+' ':'')+cleaned,previousLength=normalize(previous).length,pos=normalize(joined).indexOf(needle,Math.max(0,previousLength-needle.length+1));
-          if(pos>=0&&pos+needle.length>previousLength){const first=normalize(cleaned).includes(needle)?i+1:(carry[0]?.line||i+1),location=first===i+1?`السطر ${i+1}`:`الأسطر ${first}–${i+1}`;matches.push({location:location+' (نص OpenITI الخام، ليس رقم صفحة)',text:excerpt(joined,needle)});}
+          const cleaned=line.replace(/^~~\s?/,''),previous=carry.map(x=>x.text).join(' '),joined=(previous?previous+' ':'')+cleaned,previousLength=normalize(previous,mode).length,pos=normalize(joined,mode).indexOf(needle,Math.max(0,previousLength-needle.length+1));
+          if(pos>=0&&pos+needle.length>previousLength){const first=normalize(cleaned,mode).includes(needle)?i+1:(carry[0]?.line||i+1),location=first===i+1?`السطر ${i+1}`:`الأسطر ${first}–${i+1}`;matches.push({location:location+' (نص OpenITI الخام، ليس رقم صفحة)',text:excerpt(joined,needle,mode)});}
           carry.push({line:i+1,text:cleaned.slice(-400)});carry=carry.slice(-6);while(carry.reduce((n,x)=>n+x.text.length,0)>800&&carry.length>1)carry.shift();
-        }else if(normalize(line).includes(needle))matches.push({location:`السطر ${i+1}`,text:excerpt(line,needle)});
+        }else if(normalize(line,mode).includes(needle))matches.push({location:`السطر ${i+1}`,text:excerpt(line,needle,mode)});
         if(matches.length>=MAX_MATCHES)break;
       }
       if(isBatchOcr)fileWarningForSearch='نص OCR المحلي تقريبي وقد يتضمن صفحات فارغة أو أخطاء؛ طابق المقتطف ورقم الصفحة مع الأصل والطبعة.';
       if(isMineru)fileWarningForSearch='نتيجة MinerU مستوردة وقد تحذف عناصر أو تخطئ في ترتيب العربية وقراءة الصفحات. رقم الصفحة من ملف النتيجة؛ طابقه مع الأصل والطبعة.';
       if(isOpeniti)fileWarningForSearch='نص OpenITI الخام قد يحتوي وسومًا وأخطاء؛ الأسطر ليست صفحات الطبعة. طابق المقتطف مع الأصل وراجع الحقوق.';
     }
-    return {matches,scanned,total,partial:scanned<total||matches.length>=MAX_MATCHES,warning:fileWarningForSearch};
+    return {match_mode:mode,matches,scanned,total,partial:scanned<total||matches.length>=MAX_MATCHES,warning:fileWarningForSearch+(mode==='arabic-variants'?' مطابقة مرنة للألف والياء فقط؛ قد تشمل أسماء مختلفة ولا تشمل جميع اختلافات التهجئة.':'')};
   }
   window.browserEngine = async (path,data={}) => {
     if(path==='/api/projects')return {projects:projects()};
@@ -494,7 +495,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/youtube')return {results:await youtube(data.query,data.key)};
     if(path==='/api/library/import')return {document:await importDocument(data.name,data.content)};
     if(path==='/api/library/export')return {document:await exportDocument(data.id)};
-    if(path==='/api/library/search')return searchDocument(data.id,data.query);
+    if(path==='/api/library/search')return searchDocument(data.id,data.query,data.match_mode===undefined?'basic':data.match_mode);
     if(path==='/api/lm'||path==='/api/prepare-prompt')throw Error('Qwen غير متاح من نسخة المتصفح؛ استخدم نسخة Windows المحلية.');
     if(['/api/suggestions','/api/analyze','/api/draft'].includes(path)){
       const p=data.project;validate(p);

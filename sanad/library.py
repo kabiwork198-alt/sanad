@@ -14,6 +14,7 @@ MAX_FILE = 20 * 1024 * 1024
 MAX_PAGES = 300
 MAX_MATCHES = 12
 _IMPORT_LOCK = threading.Lock()
+_ARABIC_VARIANTS = str.maketrans({'أ':'ا', 'إ':'ا', 'آ':'ا', 'ٱ':'ا', 'ى':'ي'})
 
 
 def import_document(data_dir, name, encoded):
@@ -80,29 +81,32 @@ def export_document(data_dir, ident):
             'content': base64.b64encode(data).decode('ascii')}
 
 
-def normalize(text):
-    return ''.join(c for c in unicodedata.normalize('NFKC', text).casefold() if not unicodedata.combining(c) and c != '\u0640')
+def normalize(text, mode='basic'):
+    value = ''.join(c for c in unicodedata.normalize('NFKC', text).casefold() if not unicodedata.combining(c) and c != '\u0640')
+    return value.translate(_ARABIC_VARIANTS) if mode == 'arabic-variants' else value
 
 
-def excerpt(line, needle):
+def excerpt(line, needle, mode='basic'):
     """Keep the match visible even in long OCR/wiki lines with diacritics."""
-    at = normalize(line).find(needle)
+    at = normalize(line, mode).find(needle)
     if at < 0: return line[:1000]
     offset = 0
     original = 0
     for original, char in enumerate(line):
-        offset += len(normalize(char))
+        offset += len(normalize(char, mode))
         if offset > at: break
     start = max(0, original - 250)
     return ('…' if start else '') + line[start:start+1000] + ('…' if len(line)>start+1000 else '')
 
 
-def search_document(data_dir, ident, query):
+def search_document(data_dir, ident, query, mode='basic'):
     if not isinstance(ident, str) or not re.fullmatch(r'[0-9a-f]{64}', ident):
         raise ValueError('معرّف الملف غير صالح')
     if not isinstance(query, str) or not 2 <= len(query.strip()) <= 200:
         raise ValueError('أدخل عبارة بحث من حرفين إلى 200 حرف')
-    needle = normalize(query.strip())
+    if mode not in ('basic', 'arabic-variants'):
+        raise ValueError('نمط مطابقة البحث غير صالح')
+    needle = normalize(query.strip(), mode)
     if not needle.strip():
         raise ValueError('عبارة البحث غير صالحة')
     data = read_verified_document(data_dir, ident)
@@ -124,8 +128,8 @@ def search_document(data_dir, ident, query):
             for page, text in pages:
                 scanned += 1
                 for line in text.splitlines():
-                    if needle in normalize(line):
-                        matches.append({'location': f'صفحة PDF {page}', 'text': excerpt(line, needle)})
+                    if needle in normalize(line, mode):
+                        matches.append({'location': f'صفحة PDF {page}', 'text': excerpt(line, needle, mode)})
                         if len(matches) >= MAX_MATCHES:
                             break
                 if len(matches) >= MAX_MATCHES:
@@ -152,27 +156,27 @@ def search_document(data_dir, ident, query):
                 if marker:
                     paginated_page = int(marker.group(1))
                     continue
-                if paginated_page is not None and line.startswith('| ') and needle in normalize(line[2:]):
+                if paginated_page is not None and line.startswith('| ') and needle in normalize(line[2:], mode):
                     engine = 'MinerU' if is_mineru else 'OCR المحلي'
-                    matches.append({'location': f'صفحة PDF {paginated_page} بحسب {engine}؛ طابقها بالأصل', 'text': excerpt(line[2:], needle)})
+                    matches.append({'location': f'صفحة PDF {paginated_page} بحسب {engine}؛ طابقها بالأصل', 'text': excerpt(line[2:], needle, mode)})
             elif is_openiti:
                 if not line.strip() or line.startswith('# ' ) or line.startswith('### '):
                     carry = []
                 cleaned = re.sub(r'^~~\s?', '', line)
                 previous = ' '.join(part for _, part in carry)
                 joined = (previous + ' ' if previous else '') + cleaned
-                previous_length = len(normalize(previous))
-                pos = normalize(joined).find(needle, max(0, previous_length - len(needle) + 1))
+                previous_length = len(normalize(previous, mode))
+                pos = normalize(joined, mode).find(needle, max(0, previous_length - len(needle) + 1))
                 if pos >= 0 and pos + len(needle) > previous_length:
-                    first = number if needle in normalize(cleaned) else (carry[0][0] if carry else number)
+                    first = number if needle in normalize(cleaned, mode) else (carry[0][0] if carry else number)
                     location = f'السطر {number}' if first == number else f'الأسطر {first}–{number}'
-                    matches.append({'location': location + ' (نص OpenITI الخام، ليس رقم صفحة)', 'text': excerpt(joined, needle)})
+                    matches.append({'location': location + ' (نص OpenITI الخام، ليس رقم صفحة)', 'text': excerpt(joined, needle, mode)})
                 carry.append((number, cleaned[-400:]))
                 carry = carry[-6:]
                 while sum(len(part) for _, part in carry) > 800 and len(carry) > 1:
                     carry.pop(0)
-            elif needle in normalize(line):
-                matches.append({'location': f'السطر {number}', 'text': excerpt(line, needle)})
+            elif needle in normalize(line, mode):
+                matches.append({'location': f'السطر {number}', 'text': excerpt(line, needle, mode)})
             if len(matches) >= MAX_MATCHES:
                 break
     warning = 'النص مستخرج آليًا وقد يتضمن أخطاء. طابقه مع النسخة الأصلية. لا يُقرأ النص من الصور الممسوحة ضوئيًا دون OCR.'
@@ -182,4 +186,6 @@ def search_document(data_dir, ident, query):
         warning = 'نتيجة MinerU مستوردة وقد تحذف عناصر أو تخطئ في ترتيب العربية وقراءة الصفحات. رقم الصفحة من ملف النتيجة؛ طابقه مع الأصل والطبعة.'
     if not pdf and is_openiti:
         warning = 'نص OpenITI الخام قد يحتوي وسومًا وأخطاء؛ الأسطر ليست صفحات الطبعة. طابق المقتطف مع الأصل وراجع الحقوق.'
-    return {'matches': matches, 'scanned': scanned, 'total': total_pages, 'partial': scanned < total_pages or len(matches) >= MAX_MATCHES, 'warning': warning}
+    if mode == 'arabic-variants':
+        warning += ' مطابقة مرنة للألف والياء فقط؛ قد تشمل أسماء مختلفة ولا تشمل جميع اختلافات التهجئة.'
+    return {'match_mode': mode, 'matches': matches, 'scanned': scanned, 'total': total_pages, 'partial': scanned < total_pages or len(matches) >= MAX_MATCHES, 'warning': warning}
