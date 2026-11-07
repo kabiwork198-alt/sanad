@@ -50,7 +50,7 @@ def internet_archive(query):
 
 def loc(query, collection):
     """Search two fixed LOC collections; do not infer access rights from a result."""
-    if collection == 'world-digital-library':
+    if collection in ('world-digital-library', 'islamic-manuscripts-from-mali'):
         params = {'fo':'json', 'at':'results', 'c':'8', 'q':query}
     elif collection == 'chronicling-america':
         params = {'fo':'json', 'at':'results', 'c':'8', 'dl':'page', 'qs':query}
@@ -71,6 +71,8 @@ def loc(query, collection):
         if isinstance(raw_kind, str): raw_kind = [raw_kind]
         kind = ', '.join(str(x) for x in raw_kind[:4]) if isinstance(raw_kind, list) else ''
         restricted = 'يذكر السجل وجود تقييد.' if item.get('access_restricted') is True else 'تحقق من الإتاحة والحقوق في السجل.'
+        if collection == 'islamic-manuscripts-from-mali':
+            kind = 'مخطوطات مالي الإسلامية؛ قد تكون النتيجة وصفًا فقط، وراجع الصورة وحقوقها. ' + kind
         if collection == 'chronicling-america':
             kind = 'صفحة صحيفة أمريكية؛ تحقق من التاريخ وصورة الصفحة وأخطاء OCR. ' + kind
         items.append({'title':str(title)[:300], 'url':url, 'author':'مكتبة الكونغرس / الجهة الحافظة كما في السجل',

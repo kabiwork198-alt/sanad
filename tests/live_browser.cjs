@@ -39,7 +39,7 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   await page.click('#empty-new');await page.click('[data-tab="research"]');await page.click('#research-search');
   await page.waitForFunction(()=>typeof researchResult!=='undefined'&&researchResult!==null,{timeout:45000});
   const result=await page.evaluate(()=>researchResult);
-  const interesting=p=>['المكتبة الرقمية العالمية','صحف Chronicling America','DOAJ','OpenAlex'].includes(p.provider);
+  const interesting=p=>['المكتبة الرقمية العالمية','صحف Chronicling America','مخطوطات مالي الإسلامية','DOAJ','OpenAlex'].includes(p.provider);
   report('Browser Arabic providers: '+result.providers.filter(interesting).map(p=>p.provider+': '+p.status+' / '+p.count).join('; '));
   report('Browser visible result cards: '+(await page.$$('[data-research-result]')).length);
   await page.$eval('#research-query',e=>e.value='');await page.type('#research-query','Baghdad');await page.click('#research-search');

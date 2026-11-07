@@ -66,7 +66,9 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   const topics=await api('/api/topics',{});
   assert.equal(topics.topics[0].title,'الخوارزمي');
   const result=await api('/api/research',{query:'History'});
-  assert.equal(result.results.length,9);
+  assert.equal(result.results.length,10);
+  assert.match(foundMali().detail,/مخطوطات مالي/);
+  function foundMali(){return result.results.find(x=>x.provider==='مخطوطات مالي الإسلامية')}
   const found = name => result.results.find(x=>x.provider===name);
   assert.match(found('المكتبة الرقمية العالمية').url,/https:\/\/www.loc.gov\/item/);
   assert.match(found('المكتبة الرقمية العالمية').detail,/لا إلى الحدث/);

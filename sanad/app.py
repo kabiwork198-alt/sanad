@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
 
-from sanad import library, workflow, wikipedia, catalogs, openiti
+from sanad import library, workflow, wikipedia, catalogs, openiti, shamela
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -202,7 +202,7 @@ def research_search(query, provider=None):
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'DOI: ' + x['doi'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_crossref(query)]
     def openlibrary():
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'سنة طبعة مفهرسة: ' + x['year'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_openlibrary(query)]
-    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('DOAJ', lambda: catalogs.doaj(query)), ('OpenAlex', lambda: catalogs.openalex(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
+    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('DOAJ', lambda: catalogs.doaj(query)), ('OpenAlex', lambda: catalogs.openalex(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('مخطوطات مالي الإسلامية', lambda: catalogs.loc(query, 'islamic-manuscripts-from-mali')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
     if provider is not None:
         if not isinstance(provider, str) or provider not in [name for name, _ in providers]:
             raise ValueError('المصدر غير مدعوم')
@@ -293,6 +293,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {'topics': wikipedia.topics(), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
             if path == '/api/wikisource/read':
                 return self.send(200, catalogs.read_wikisource(body.get('page_id', '')))
+            if path == '/api/shamela/search':
+                return self.send(200, shamela.search(body.get('query', '')))
+            if path == '/api/shamela/read':
+                return self.send(200, shamela.read_page(body.get('book_id', ''), body.get('page_id', '')))
             if path == '/api/openiti/read':
                 return self.send(200, openiti.read_text(body.get('path', '')))
             if path == '/api/openiti/search':

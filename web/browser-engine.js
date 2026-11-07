@@ -156,13 +156,13 @@ window.SANAD_BROWSER = true;
     return (d.response?.docs||[]).filter(x=>typeof x.identifier==='string'&&/^[A-Za-z0-9._-]{1,100}$/.test(x.identifier)).map(x=>({title:String(Array.isArray(x.title)?x.title[0]:(x.title||x.identifier)).slice(0,300),url:'https://archive.org/details/'+x.identifier,author:String(Array.isArray(x.creator)?x.creator.slice(0,5).join(', '):(x.creator||'')).slice(0,300),detail:'سنة النشر المفهرسة: '+String(x.year||'غير معروفة')+'؛ قد يكون السجل غير دقيق أو مكررًا.',access:'سجل كتاب في Internet Archive؛ لا يضمن الإتاحة أو التنزيل أو الترخيص.'}));
   }
   async function loc(q, collection) {
-    if(!['world-digital-library','chronicling-america'].includes(collection))throw Error('مجموعة غير مدعومة');
+    if(!['world-digital-library','chronicling-america','islamic-manuscripts-from-mali'].includes(collection))throw Error('مجموعة غير مدعومة');
     const p={fo:'json',at:'results',c:'8',...(collection==='chronicling-america'?{dl:'page',qs:q}:{q})};
     const d=await getJSON('https://www.loc.gov/collections/'+collection+'/?'+params(p));
     return (d.results||[]).flatMap(x=>{
       let url;try{url=new URL(x.url||x.id||'');if(!['www.loc.gov','loc.gov'].includes(url.hostname)||!['http:','https:'].includes(url.protocol)||url.username||url.password)return [];url.protocol='https:';}catch{return [];}
       const date=String(x.date||'غير معروف').slice(0,100),kind=Array.isArray(x.original_format)?x.original_format.slice(0,4).join(', '):String(x.original_format||'');
-      const note=collection==='chronicling-america'?'صفحة صحيفة أمريكية؛ تحقق من التاريخ وصورة الصفحة وأخطاء OCR. ':'';
+      const note=collection==='chronicling-america'?'صفحة صحيفة أمريكية؛ تحقق من التاريخ وصورة الصفحة وأخطاء OCR. ':collection==='islamic-manuscripts-from-mali'?'مخطوطات مالي الإسلامية؛ قد تكون النتيجة وصفًا فقط، وراجع الصورة وحقوقها. ':'';
       return [{title:String(Array.isArray(x.title)?(x.title[0]||'بلا عنوان'):(x.title||'بلا عنوان')).slice(0,300),url:url.href,author:'مكتبة الكونغرس / الجهة الحافظة كما في السجل',detail:'التاريخ في السجل: '+date+'؛ النوع: '+note+(kind||'غير محدد')+'؛ قد يشير التاريخ إلى النشر أو إنشاء المادة لا إلى الحدث.',access:'سجل أرشيفي؛ لم تُقرأ المادة أو يثبت ترخيص استخدامها. '+(x.access_restricted===true?'يذكر السجل وجود تقييد.':'تحقق من الإتاحة والحقوق في السجل.')}];
     });
   }
@@ -250,7 +250,7 @@ window.SANAD_BROWSER = true;
   }
   async function research(q, selected) {
     q=queryText(q);
-    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['Internet Archive',()=>internetArchive(q)],['DOAJ',()=>doaj(q)],['OpenAlex',()=>openalex(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')]];
+    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['Internet Archive',()=>internetArchive(q)],['DOAJ',()=>doaj(q)],['OpenAlex',()=>openalex(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')],['مخطوطات مالي الإسلامية',()=>loc(q,'islamic-manuscripts-from-mali')]];
     if(selected!==undefined&&(typeof selected!=='string'||!providers.some(p=>p[0]===selected)))throw Error('المصدر غير مدعوم');
     const requested=selected===undefined?providers:providers.filter(p=>p[0]===selected);
     const outcomes=await Promise.all(requested.map(async ([provider,fn])=>{try{const items=await fn();return {provider,items,status:'اكتمل',reason:''};}catch(e){const message=String(e?.message||'');return {provider,items:[],status:'تعذر الاتصال أو قراءة الاستجابة',reason:(/^HTTP [0-9]{3}$/.test(message)||message==='انتهت مهلة الاتصال')?message:'تحقق من الاتصال أو قيود المتصفح'};}}));
