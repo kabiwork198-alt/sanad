@@ -16,6 +16,8 @@ const context = {
     if (url.startsWith('https://api.crossref.org/')) return {ok:true,json:async()=>({message:{items:[{title:['Paper'],DOI:'10.1/test',URL:'https://doi.org/10.1/test'}]}})};
     if (url.startsWith('https://openlibrary.org/')) return {ok:true,json:async()=>({docs:[{key:'/works/OL123W',title:'Book',author_name:['Author'],first_publish_year:2000}]})};
     if (url.startsWith('https://commons.wikimedia.org/')) throw Error('blocked');
+    if (url.startsWith('https://ar.wikisource.org/')) return {ok:true,json:async()=>({query:{search:[{pageid:39899,title:'تاريخ الطبري'}]}})};
+    if (url.startsWith('https://archive.org/')) return {ok:true,json:async()=>({response:{docs:[{identifier:'good-item',title:'Book in archive',creator:['Author'],year:2000},{identifier:'../bad',title:'Bad'}]}})};
     if (url.startsWith('https://ar.wikipedia.org/')) {
       const q=new URL(url).searchParams;
       if(q.get('list')==='categorymembers')return {ok:true,json:async()=>({query:{categorymembers:[{pageid:1319,title:'الخوارزمي'}]}})};
@@ -42,7 +44,10 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   const topics=await api('/api/topics',{});
   assert.equal(topics.topics[0].title,'الخوارزمي');
   const result=await api('/api/research',{query:'History'});
-  assert.equal(result.results.length,3);
+  assert.equal(result.results.length,5);
+  assert.match(result.results[3].url,/ar.wikisource.org/);
+  assert.match(result.results[4].url,/archive.org\/details\/good-item/);
+  assert.match(result.results[4].access,/لا يضمن/);
   assert.match(result.results[2].url, /cite_note-1/);
   assert.match(result.results[2].access, /لم يُقرأ/);
   assert.equal(result.providers[2].status,'تعذر الاتصال أو قراءة الاستجابة');

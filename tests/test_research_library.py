@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from sanad import app, library, wikipedia
+from sanad import app, library, wikipedia, catalogs
 
 
 def simple_pdf():
@@ -72,7 +72,9 @@ class FederatedSearchTest(unittest.TestCase):
         with mock.patch('sanad.app.search_crossref', side_effect=OSError('network')), \
              mock.patch('sanad.app.search_openlibrary', return_value=[item]), \
              mock.patch('sanad.app.search_commons', return_value=[]), \
-             mock.patch('sanad.app.wikipedia.citations', return_value=[]):
+             mock.patch('sanad.app.wikipedia.citations', return_value=[]), \
+             mock.patch('sanad.app.catalogs.wikisource', return_value=[]), \
+             mock.patch('sanad.app.catalogs.internet_archive', return_value=[]):
             result = app.research_search('example')
         self.assertEqual(len(result['results']), 1)
         self.assertEqual(result['results'][0]['provider'], 'Open Library')
@@ -87,6 +89,25 @@ class FederatedSearchTest(unittest.TestCase):
             found = app.search_commons('history')
         self.assertEqual(len(found), 1)
         self.assertIn('CC BY', found[0]['detail'])
+
+
+class CatalogTest(unittest.TestCase):
+    def test_wikisource_does_not_claim_reading(self):
+        data={'query':{'search':[{'pageid':39899,'title':'تاريخ الطبري'}, {'pageid':'bad','title':'fake'}]}}
+        with mock.patch('sanad.catalogs.get_json',return_value=data):
+            items=catalogs.wikisource('الطبري')
+        self.assertEqual(len(items),1)
+        self.assertEqual(items[0]['url'],'https://ar.wikisource.org/?curid=39899')
+        self.assertIn('لم يُقرأ',items[0]['access'])
+
+    def test_archive_validates_identifiers_and_quotes_query(self):
+        data={'response':{'docs':[{'identifier':'good-item','title':'Book','creator':['A','B'],'year':2000},{'identifier':'../bad','title':'bad'}]}}
+        with mock.patch('sanad.catalogs.get_json',return_value=data) as fetch:
+            items=catalogs.internet_archive('A "title"')
+        self.assertEqual(len(items),1)
+        self.assertEqual(items[0]['url'],'https://archive.org/details/good-item')
+        self.assertIn('لا يضمن',items[0]['access'])
+        self.assertIn('\\"title\\"',fetch.call_args.args[1]['q'])
 
 
 class WikipediaTest(unittest.TestCase):

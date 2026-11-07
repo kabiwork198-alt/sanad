@@ -19,6 +19,8 @@ async function check(name,url){
    check('Crossref','https://api.crossref.org/works?rows=1&query.bibliographic='+q),
    check('Open Library','https://openlibrary.org/search.json?limit=1&q='+q),
    check('Wikimedia Commons','https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=1&prop=imageinfo&iiprop=url%7Cextmetadata&format=json&formatversion=2&origin=*&gsrsearch='+q),
+   check('Arabic Wikisource','https://ar.wikisource.org/w/api.php?action=query&list=search&srnamespace=0&srlimit=1&format=json&formatversion=2&origin=*&srsearch='+q),
+   check('Internet Archive','https://archive.org/advancedsearch.php?output=json&rows=1&fl%5B%5D=identifier&fl%5B%5D=title&q='+enc('\"الخوارزمي\" AND mediatype:texts')),
  ]);
  report('Wikipedia topic count: '+(topics?.query?.categorymembers?.length ?? 'unknown'));
  const id=search?.query?.search?.[0]?.pageid;
