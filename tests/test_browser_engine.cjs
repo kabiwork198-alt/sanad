@@ -16,7 +16,15 @@ const context = {
     if (url.startsWith('https://api.crossref.org/')) return {ok:true,json:async()=>({message:{items:[{title:['Paper'],DOI:'10.1/test',URL:'https://doi.org/10.1/test'}]}})};
     if (url.startsWith('https://openlibrary.org/')) return {ok:true,json:async()=>({docs:[{key:'/works/OL123W',title:'Book',author_name:['Author'],first_publish_year:2000}]})};
     if (url.startsWith('https://commons.wikimedia.org/')) throw Error('blocked');
-    if (url.startsWith('https://ar.wikisource.org/')) return {ok:true,json:async()=>({query:{search:[{pageid:39899,title:'تاريخ الطبري'}]}})};
+    if (url.startsWith('https://doaj.org/api/')) return {ok:true,json:async()=>({results:[{id:'a'.repeat(32),bibjson:{title:'DOAJ Study',year:'2020',journal:{title:'Journal'}}},{id:'../bad',bibjson:{}}]})};
+    if (url.startsWith('https://api.openalex.org/')) return {ok:true,json:async()=>({results:[{id:'https://openalex.org/W123',title:'OpenAlex Study',publication_year:2024,open_access:{oa_status:'closed'}},{id:'https://openalex.org.evil/W123'}]})};
+    if (url.startsWith('https://ar.wikisource.org/')) {
+      if(new URL(url).searchParams.get('prop')==='revisions'){
+        const data=JSON.stringify({query:{pages:[{pageid:43576,title:'صفحة',revisions:[{revid:42,timestamp:'2025-01-01T00:00:00Z',slots:{main:{content:'نص أصلي للمراجعة'}}}]}]}});
+        return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>Uint8Array.from(Buffer.from(data)).buffer};
+      }
+      return {ok:true,json:async()=>({query:{search:[{pageid:39899,title:'تاريخ الطبري'}]}})};
+    }
     if (url.startsWith('https://www.loc.gov/')) return {ok:true,json:async()=>({results:[{title:'Map',url:'http://www.loc.gov/item/123/',date:'1900',original_format:['map']},{title:'Bad',url:'https://www.loc.gov.evil.test/'}]})};
     if (url.startsWith('https://archive.org/')) return {ok:true,json:async()=>({response:{docs:[{identifier:'good-item',title:'Book in archive',creator:['Author'],year:2000},{identifier:'../bad',title:'Bad'}]}})};
     if (url.startsWith('https://ar.wikipedia.org/')) {
@@ -54,15 +62,23 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   const topics=await api('/api/topics',{});
   assert.equal(topics.topics[0].title,'الخوارزمي');
   const result=await api('/api/research',{query:'History'});
-  assert.equal(result.results.length,7);
-  assert.match(result.results[5].url,/https:\/\/www.loc.gov\/item/);
-  assert.match(result.results[5].detail,/لا إلى الحدث/);
-  assert.match(result.results[3].url,/ar.wikisource.org/);
-  assert.match(result.results[4].url,/archive.org\/details\/good-item/);
-  assert.match(result.results[4].access,/لا يضمن/);
-  assert.match(result.results[2].url, /cite_note-1/);
-  assert.match(result.results[2].access, /لم يُقرأ/);
-  assert.equal(result.providers[2].status,'تعذر الاتصال أو قراءة الاستجابة');
+  assert.equal(result.results.length,9);
+  const found = name => result.results.find(x=>x.provider===name);
+  assert.match(found('المكتبة الرقمية العالمية').url,/https:\/\/www.loc.gov\/item/);
+  assert.match(found('المكتبة الرقمية العالمية').detail,/لا إلى الحدث/);
+  assert.match(found('ويكي مصدر العربية').url,/ar.wikisource.org/);
+  assert.match(found('Internet Archive').url,/archive.org\/details\/good-item/);
+  assert.match(found('Internet Archive').access,/لا يضمن/);
+  assert.match(found('إحالات ويكيبيديا العربية').url, /cite_note-1/);
+  assert.match(found('إحالات ويكيبيديا العربية').access, /لم يُقرأ/);
+  assert.match(found('DOAJ').url,/doaj.org\/article/);
+  assert.match(found('OpenAlex').detail,/closed/);
+  assert.equal(result.providers.find(x=>x.provider==='Wikimedia Commons').status,'تعذر الاتصال أو قراءة الاستجابة');
+  const revision=await api('/api/wikisource/read',{page_id:'43576'});
+  assert.equal(revision.text,'نص أصلي للمراجعة');
+  assert.equal(revision.revision_url,'https://ar.wikisource.org/w/index.php?oldid=42');
+  assert.match(revision.warning,/ليس رقم صفحة/);
+  await assert.rejects(()=>api('/api/wikisource/read',{page_id:'https://evil.test'}));
   await assert.rejects(()=>api('/api/lm',{prompt:'test'}));
   await api('/api/delete',{id:project.id});
   assert.equal((await api('/api/projects')).projects.length,0);

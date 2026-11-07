@@ -75,6 +75,8 @@ class FederatedSearchTest(unittest.TestCase):
              mock.patch('sanad.app.wikipedia.citations', return_value=[]), \
              mock.patch('sanad.app.catalogs.wikisource', return_value=[]), \
              mock.patch('sanad.app.catalogs.internet_archive', return_value=[]), \
+             mock.patch('sanad.app.catalogs.doaj', return_value=[]), \
+             mock.patch('sanad.app.catalogs.openalex', return_value=[]), \
              mock.patch('sanad.app.catalogs.loc', return_value=[]), \
              mock.patch('sanad.app.catalogs.national_archives', return_value=[]):
             result = app.research_search('example')
@@ -101,6 +103,38 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(len(items),1)
         self.assertEqual(items[0]['url'],'https://ar.wikisource.org/?curid=39899')
         self.assertIn('لم يُقرأ',items[0]['access'])
+
+    def test_wikisource_read_revision_and_invalid_ids(self):
+        data={'query':{'pages':[{'pageid':43576,'title':'صفحة','revisions':[{'revid':42,'timestamp':'2025-01-01T00:00:00Z','slots':{'main':{'content':'نص تجريبي'}}}]}]}}
+        with mock.patch('sanad.catalogs.get_json',return_value=data) as fetch:
+            result=catalogs.read_wikisource('43576')
+        self.assertEqual(result['text'],'نص تجريبي')
+        self.assertEqual(result['revision_url'],'https://ar.wikisource.org/w/index.php?oldid=42')
+        self.assertIn('ليس رقم صفحة',result['warning'])
+        self.assertEqual(fetch.call_args.args[1]['pageids'],'43576')
+        with self.assertRaises(ValueError): catalogs.read_wikisource('https://evil.test')
+        with mock.patch('sanad.catalogs.get_json',return_value={'query':{'pages':[{'pageid':43576}]}}):
+            with self.assertRaises(ValueError): catalogs.read_wikisource('43576')
+
+    def test_academic_catalogs_retain_provenance_not_fabricated_access(self):
+        payload={'results':[{'id':'a'*32,'bibjson':{'title':'Study','year':'2020','author':[{'name':'Scholar'}],'journal':{'title':'Journal'},'identifier':[{'type':'doi','id':'10.1/xyz'}]}},{'id':'../bad','bibjson':{}}]}
+        with mock.patch('sanad.catalogs.get_json',return_value=payload) as fetch:
+            items=catalogs.doaj('history')
+        self.assertEqual(len(items),1)
+        self.assertEqual(items[0]['url'],'https://doaj.org/article/'+'a'*32)
+        self.assertIn('لم يُقرأ',items[0]['access'])
+        self.assertIn('Journal',items[0]['detail'])
+        self.assertEqual(fetch.call_args.args[0],'https://doaj.org/api/search/articles/history')
+        payload={'results':[{'id':'https://openalex.org/W123','title':'Work','publication_year':2024,'authorships':[{'author':{'display_name':'Author'}}],'open_access':{'oa_status':'closed'}},{'id':'https://openalex.org.evil/W123','title':'bad'}]}
+        with mock.patch('sanad.catalogs.get_json',return_value=payload) as fetch:
+            items=catalogs.openalex('history')
+        self.assertEqual(len(items),1)
+        self.assertIn('closed',items[0]['detail'])
+        self.assertNotIn('api_key',fetch.call_args.args[1])
+        self.assertIn('لم يُقرأ',items[0]['access'])
+
+    def test_long_diacritic_line_search_shows_actual_match(self):
+        self.assertIn('العِلم',library.excerpt(('فَ'*1000)+' العِلم نص','العلم'))
 
     def test_loc_preserves_date_without_equating_it_to_event(self):
         data={'results':[{'title':'A map', 'date':'1900', 'url':'http://www.loc.gov/item/123/', 'original_format':['map']}, {'title':'Spoof', 'url':'https://www.loc.gov.evil.test/item/1'}]}

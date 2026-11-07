@@ -9,8 +9,9 @@ window.SANAD_BROWSER = true;
   const trim = x => String(x ?? '').trim();
   const normalize = s => String(s).normalize('NFKC').toLocaleLowerCase().replace(/[\p{M}\u0640]/gu, '');
   function excerpt(text, needle) {
-    // Normalization may change character offsets; this is an approximate context window.
-    const start = Math.max(0, normalize(text).indexOf(needle) - 250);
+    const at=normalize(text).indexOf(needle);let pos=0,original=0;
+    if(at>=0){for(const char of text){pos+=normalize(char).length;if(pos>at)break;original+=char.length}}
+    const start=Math.max(0,original-250);
     return (start ? '…' : '') + text.slice(start, start + 1000) + (text.length > start + 1000 ? '…' : '');
   }
   const params = o => new URLSearchParams(o).toString();
@@ -165,9 +166,34 @@ window.SANAD_BROWSER = true;
       return [{title:String(Array.isArray(x.title)?(x.title[0]||'بلا عنوان'):(x.title||'بلا عنوان')).slice(0,300),url:url.href,author:'مكتبة الكونغرس / الجهة الحافظة كما في السجل',detail:'التاريخ في السجل: '+date+'؛ النوع: '+note+(kind||'غير محدد')+'؛ قد يشير التاريخ إلى النشر أو إنشاء المادة لا إلى الحدث.',access:'سجل أرشيفي؛ لم تُقرأ المادة أو يثبت ترخيص استخدامها. '+(x.access_restricted===true?'يذكر السجل وجود تقييد.':'تحقق من الإتاحة والحقوق في السجل.')}];
     });
   }
+  async function doaj(q) {
+    const d=await getJSON('https://doaj.org/api/search/articles/'+encodeURIComponent(q)+'?'+params({page:'1',pageSize:'10'}));
+    return (d.results||[]).flatMap(x=>{if(!/^[a-f0-9]{32}$/.test(x.id||'')||!x.bibjson||typeof x.bibjson!=='object')return [];const b=x.bibjson,j=b.journal||{},doi=(Array.isArray(b.identifier)?b.identifier:[]).find(t=>t?.type==='doi')?.id||'';return [{title:String(b.title||'بلا عنوان').slice(0,300),author:(Array.isArray(b.author)?b.author:[]).slice(0,5).map(a=>a?.name||'').join(', ').slice(0,300),url:'https://doaj.org/article/'+x.id,detail:'سنة نشر الدراسة: '+String(b.year||'غير معروفة')+'؛ المجلة: '+String(j.title||'غير معروفة')+'؛ DOI: '+String(doi),access:'سجل دراسة في DOAJ؛ تحقق من النص الكامل والرخصة لدى الناشر. لم يُقرأ النص آليًا.'}];});
+  }
+  async function openalex(q) {
+    const d=await getJSON('https://api.openalex.org/works?'+params({search:q,per_page:'10',select:'id,title,publication_year,authorships,open_access'}));
+    return (d.results||[]).flatMap(x=>{if(!/^https:\/\/openalex\.org\/W[0-9]+$/.test(x.id||''))return [];const authors=Array.isArray(x.authorships)?x.authorships:[],oa=x.open_access||{};return [{title:String(x.title||'بلا عنوان').slice(0,300),author:authors.slice(0,5).map(a=>a.author?.display_name||'').join(', ').slice(0,300),url:x.id,detail:'سنة نشر الدراسة: '+String(x.publication_year||'غير معروفة')+'؛ حالة الوصول بحسب الفهرس: '+String(oa.oa_status||'غير معروف'),access:'سجل OpenAlex؛ تحقق من النص الكامل والرخصة والإتاحة الحالية. لم يُقرأ النص آليًا.'}];});
+  }
+  async function readWikisource(id) {
+    if(typeof id!=='string'||!/^[1-9][0-9]{0,12}$/.test(id))throw Error('معرّف صفحة ويكي مصدر غير صالح');
+    const url='https://ar.wikisource.org/w/api.php?'+params({action:'query',prop:'revisions',pageids:id,rvprop:'ids|timestamp|content',rvslots:'main',format:'json',formatversion:'2',origin:'*'});
+    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),15000);let bytes=0,chunks=[];
+    try {
+      const r=await fetch(url,{signal:controller.signal});if(!r.ok)throw Error('تعذر الوصول إلى ويكي مصدر');
+      const size=Number(r.headers.get('Content-Length')||0);if(size>2000000)throw Error('الصفحة أكبر من الحد الآمن؛ افتحها على موقعها أو اختر صفحة أصغر');
+      if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.length;if(bytes>2000000){await reader.cancel();throw Error('الصفحة أكبر من الحد الآمن؛ افتحها على موقعها أو اختر صفحة أصغر')}chunks.push(part.value)}}finally{reader.releaseLock()}}
+      else {const part=new Uint8Array(await r.arrayBuffer());bytes=part.length;if(bytes>2000000)throw Error('الصفحة أكبر من الحد الآمن؛ افتحها على موقعها أو اختر صفحة أصغر');chunks=[part]}
+      const all=new Uint8Array(bytes);let offset=0;for(const c of chunks){all.set(c,offset);offset+=c.length}
+      const d=JSON.parse(new TextDecoder().decode(all)),pages=d.query?.pages||[],page=pages.length===1?pages[0]:{},rev=page.revisions?.[0],text=rev?.slots?.main?.content;
+      if(String(page.pageid)!==id||!Number.isSafeInteger(rev?.revid)||rev.revid<=0||typeof text!=='string'||!text.trim())throw Error('الصفحة غير متاحة أو لا تحتوي نصًا قابلًا للقراءة');
+      if(new TextEncoder().encode(text).length>1800000)throw Error('الصفحة أكبر من الحد الآمن؛ افتحها على موقعها أو اختر صفحة أصغر');
+      return {title:String(page.title||'بلا عنوان').slice(0,300),page_id:id,revision_id:String(rev.revid),timestamp:String(rev.timestamp||''),text,revision_url:'https://ar.wikisource.org/w/index.php?oldid='+rev.revid,warning:'النص خام بصيغة ويكي وقد يكون فهرسًا أو جزءًا من كتاب، لا كتابًا كاملًا. رقم السطر ليس رقم صفحة الطبعة. تحقق من النسخة والترخيص وطابقها مع المصدر.'};
+    } catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال بويكي مصدر');throw e}
+    finally {clearTimeout(timer)}
+  }
   async function research(q) {
     q=queryText(q);
-    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['Internet Archive',()=>internetArchive(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')]];
+    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['Internet Archive',()=>internetArchive(q)],['DOAJ',()=>doaj(q)],['OpenAlex',()=>openalex(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')]];
     const outcomes=await Promise.all(providers.map(async ([provider,fn])=>{try{const items=await fn();return {provider,items,status:'اكتمل'};}catch{return {provider,items:[],status:'تعذر الاتصال أو قراءة الاستجابة'};}}));
     return {query:q,searched_at:new Date().toISOString(),providers:outcomes.map(x=>({provider:x.provider,status:x.status,count:x.items.length})),results:outcomes.flatMap(x=>x.items.map(item=>({...item,provider:x.provider}))),warning};
   }
@@ -220,6 +246,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/save'){validate(data.project);const items=projects().filter(x=>x.id!==data.project.id);items.unshift(data.project);writeProjects(items);return {ok:true};}
     if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
     if(path==='/api/topics')return topics();
+    if(path==='/api/wikisource/read')return readWikisource(data.page_id);
     if(path==='/api/research')return research(data.query);
     if(path==='/api/crossref')return {results:await crossref(data.query)};
     if(path==='/api/openlibrary')return {results:await openlibrary(data.query)};

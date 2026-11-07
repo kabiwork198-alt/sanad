@@ -96,3 +96,65 @@ def national_archives(query):
                       'detail':'رقم المرجع: '+str(reference)[:200]+'؛ التواريخ الواردة: '+str(item.get('coveringDates') or 'غير معروفة')[:100]+'؛ حالة الإغلاق في السجل: '+str(item.get('closureStatus') or 'غير معروفة')[:30],
                       'access':'سجل فهرسي فقط؛ قد يكون لدى مؤسسة أخرى أو غير مرقمن أو يتطلب رسومًا أو إذنًا.'})
     return items
+
+
+def doaj(query):
+    """Search DOAJ's public article catalog; do not automatically copy article text."""
+    url = 'https://doaj.org/api/search/articles/' + urllib.parse.quote(query, safe='')
+    data = get_json(url, {'page':'1','pageSize':'10'})
+    items = []
+    for record in data.get('results', []):
+        ident = record.get('id', '')
+        if not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{32}', ident):
+            continue
+        bib = record.get('bibjson') or {}
+        if not isinstance(bib, dict): continue
+        authors = bib.get('author') or []
+        names = ', '.join(str(x.get('name','')) for x in authors[:5] if isinstance(x,dict)) if isinstance(authors,list) else ''
+        journal = bib.get('journal') or {}
+        if not isinstance(journal,dict): journal={}
+        identifiers = bib.get('identifier') or []
+        doi = next((str(x.get('id','')) for x in identifiers if isinstance(x,dict) and x.get('type')=='doi'), '') if isinstance(identifiers,list) else ''
+        items.append({'title':str(bib.get('title') or 'بلا عنوان')[:300], 'author':names[:300],
+                      'url':'https://doaj.org/article/'+ident,
+                      'detail':'سنة نشر الدراسة: '+str(bib.get('year') or 'غير معروفة')[:40]+'؛ المجلة: '+str(journal.get('title') or 'غير معروفة')[:200]+'؛ DOI: '+doi[:200],
+                      'access':'سجل دراسة في DOAJ؛ تحقق من النص الكامل والرخصة لدى الناشر. لم يُقرأ النص آليًا.'})
+    return items
+
+
+def openalex(query):
+    """Anonymous OpenAlex search only; no account or paid API key is used."""
+    data = get_json('https://api.openalex.org/works', {'search':query,'per_page':'10','select':'id,title,publication_year,authorships,open_access'})
+    items = []
+    for record in data.get('results', []):
+        ident = record.get('id', '')
+        if not isinstance(ident,str) or not re.fullmatch(r'https://openalex\.org/W[0-9]+',ident): continue
+        authors = record.get('authorships') or []
+        names = ', '.join(str((x.get('author') or {}).get('display_name','')) for x in authors[:5] if isinstance(x,dict) and isinstance(x.get('author'),dict)) if isinstance(authors,list) else ''
+        oa = record.get('open_access') or {}
+        if not isinstance(oa,dict): oa={}
+        status = str(oa.get('oa_status') or 'غير معروف')[:80]
+        items.append({'title':str(record.get('title') or 'بلا عنوان')[:300], 'author':names[:300], 'url':ident,
+                      'detail':'سنة نشر الدراسة: '+str(record.get('publication_year') or 'غير معروفة')[:40]+'؛ حالة الوصول بحسب الفهرس: '+status,
+                      'access':'سجل OpenAlex؛ تحقق من النص الكامل والرخصة والإتاحة الحالية. لم يُقرأ النص آليًا.'})
+    return items
+
+
+def read_wikisource(page_id):
+    """Fetch one selected public Wikisource revision; do not crawl or execute wikitext."""
+    if not isinstance(page_id, str) or not re.fullmatch(r'[1-9][0-9]{0,12}', page_id):
+        raise ValueError('معرّف صفحة ويكي مصدر غير صالح')
+    data = get_json('https://ar.wikisource.org/w/api.php', {'action':'query','prop':'revisions','pageids':page_id,'rvprop':'ids|timestamp|content','rvslots':'main','format':'json','formatversion':'2'})
+    pages = data.get('query', {}).get('pages', [])
+    page = pages[0] if len(pages)==1 else {}
+    revision = (page.get('revisions') or [{}])[0]
+    text = ((revision.get('slots') or {}).get('main') or {}).get('content')
+    rev = revision.get('revid')
+    if str(page.get('pageid')) != page_id or not isinstance(rev,int) or rev<=0 or not isinstance(text,str) or not text.strip():
+        raise ValueError('الصفحة غير متاحة أو لا تحتوي نصًا قابلًا للقراءة')
+    if len(text.encode('utf-8')) > 1_800_000:
+        raise ValueError('الصفحة أكبر من الحد الآمن. افتحها على الموقع أو اختر صفحة أصغر.')
+    return {'title':str(page.get('title') or 'بلا عنوان')[:300], 'page_id':page_id, 'revision_id':str(rev),
+            'timestamp':str(revision.get('timestamp') or ''), 'text':text,
+            'revision_url':'https://ar.wikisource.org/w/index.php?oldid='+str(rev),
+            'warning':'النص خام بصيغة ويكي وقد يكون فهرسًا أو جزءًا من كتاب، لا كتابًا كاملًا. رقم السطر ليس رقم صفحة الطبعة. تحقق من النسخة والترخيص وطابقها مع المصدر.'}

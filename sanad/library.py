@@ -50,6 +50,19 @@ def normalize(text):
     return ''.join(c for c in unicodedata.normalize('NFKC', text).casefold() if not unicodedata.combining(c) and c != '\u0640')
 
 
+def excerpt(line, needle):
+    """Keep the match visible even in long OCR/wiki lines with diacritics."""
+    at = normalize(line).find(needle)
+    if at < 0: return line[:1000]
+    offset = 0
+    original = 0
+    for original, char in enumerate(line):
+        offset += len(normalize(char))
+        if offset > at: break
+    start = max(0, original - 250)
+    return ('…' if start else '') + line[start:start+1000] + ('…' if len(line)>start+1000 else '')
+
+
 def search_document(data_dir, ident, query):
     if not isinstance(ident, str) or not re.fullmatch(r'[0-9a-f]{64}', ident):
         raise ValueError('معرّف الملف غير صالح')
@@ -81,7 +94,7 @@ def search_document(data_dir, ident, query):
                 scanned += 1
                 for line in text.splitlines():
                     if needle in normalize(line):
-                        matches.append({'location': f'صفحة PDF {page}', 'text': line[:1000]})
+                        matches.append({'location': f'صفحة PDF {page}', 'text': excerpt(line, needle)})
                         if len(matches) >= MAX_MATCHES:
                             break
                 if len(matches) >= MAX_MATCHES:
@@ -98,7 +111,7 @@ def search_document(data_dir, ident, query):
         scanned = 1
         for number, line in enumerate(text.splitlines(), 1):
             if needle in normalize(line):
-                matches.append({'location': f'السطر {number}', 'text': line[:1000]})
+                matches.append({'location': f'السطر {number}', 'text': excerpt(line, needle)})
                 if len(matches) >= MAX_MATCHES:
                     break
     return {'matches': matches, 'scanned': scanned, 'total': total_pages, 'partial': scanned < total_pages or len(matches) >= MAX_MATCHES, 'warning': 'النص مستخرج آليًا وقد يتضمن أخطاء. طابقه مع النسخة الأصلية. لا يُقرأ النص من الصور الممسوحة ضوئيًا دون OCR.'}

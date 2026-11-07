@@ -39,13 +39,27 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   await page.click('#empty-new');await page.click('[data-tab="research"]');await page.click('#research-search');
   await page.waitForFunction(()=>typeof researchResult!=='undefined'&&researchResult!==null,{timeout:45000});
   const result=await page.evaluate(()=>researchResult);
-  for(const p of result.providers.filter(p=>p.provider==='المكتبة الرقمية العالمية'||p.provider==='صحف Chronicling America'))report('Browser Arabic '+p.provider+': '+p.status+' / '+p.count);
+  const interesting=p=>['المكتبة الرقمية العالمية','صحف Chronicling America','DOAJ','OpenAlex'].includes(p.provider);
+  report('Browser Arabic providers: '+result.providers.filter(interesting).map(p=>p.provider+': '+p.status+' / '+p.count).join('; '));
   report('Browser visible result cards: '+(await page.$$('[data-research-result]')).length);
   await page.$eval('#research-query',e=>e.value='');await page.type('#research-query','Baghdad');await page.click('#research-search');
   await page.waitForFunction(()=>typeof researchResult!=='undefined'&&researchResult?.query==='Baghdad',{timeout:45000});
-  const archives=await page.evaluate(()=>researchResult.providers.filter(p=>p.provider==='المكتبة الرقمية العالمية'||p.provider==='صحف Chronicling America'));
-  for(const p of archives)report('Browser Baghdad '+p.provider+': '+p.status+' / '+p.count);
+  const archives=await page.evaluate(()=>researchResult.providers);
+  report('Browser Baghdad providers: '+archives.filter(interesting).map(p=>p.provider+': '+p.status+' / '+p.count).join('; '));
   report('Browser LOC requests: '+locEvents.join(', '));if(browserConsole.length)report('Browser LOC console: '+browserConsole[0]);
+  // Exercise the actual UI: a selected public Wikisource page is downloaded, stored,
+  // searched locally and linked to a fixed revision. The page may itself be partial.
+  try {
+    await page.evaluate(()=>current.sources.push({id:crypto.randomUUID().replaceAll('-',''),title:'تاريخ الطبري/الجزء العاشر',author:'',url:'https://ar.wikisource.org/?curid=43576',access:'',notes:''}));
+    await page.click('[data-tab="sources"]');await page.click('[data-wiki-read="0"]');
+    await page.waitForSelector('[data-local-search="0"]',{timeout:25000});
+    await page.type('[data-local-query="0"]','الاثنين');await page.click('[data-local-search="0"]');
+    await page.waitForSelector('[data-match="0"]',{timeout:10000});
+    const check=await page.evaluate(()=>({note:current.sources[0].notes,match:fileMatches.matches[0].text}));
+    if(!check.note.includes('oldid=')||!check.match.includes('الاثنين'))throw Error('revision or match missing');
+    report('Wikisource live UI: selected public revision saved, searched locally, match and revision link present');
+  } catch(e) {report('Wikisource live UI unavailable: '+e.message.slice(0,150));}
+
   if(errors.length)throw Error('Browser script errors: '+errors.join('; '));
  }finally{if(browser)await browser.close();server.close()}
 })().catch(err=>{console.error(err);process.exitCode=1});

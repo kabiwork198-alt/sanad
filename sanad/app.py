@@ -202,9 +202,9 @@ def research_search(query):
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'DOI: ' + x['doi'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_crossref(query)]
     def openlibrary():
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'سنة طبعة مفهرسة: ' + x['year'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_openlibrary(query)]
-    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
+    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('DOAJ', lambda: catalogs.doaj(query)), ('OpenAlex', lambda: catalogs.openalex(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
     results, states = [], []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=9) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=11) as pool:
         futures = [(name, pool.submit(fn)) for name, fn in providers]
         for name, future in futures:
             try:
@@ -286,6 +286,8 @@ class Handler(BaseHTTPRequestHandler):
             path = urllib.parse.urlsplit(self.path).path
             if path == '/api/topics':
                 return self.send(200, {'topics': wikipedia.topics(), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
+            if path == '/api/wikisource/read':
+                return self.send(200, catalogs.read_wikisource(body.get('page_id', '')))
             if path == '/api/research':
                 return self.send(200, research_search(body.get('query', '')))
             if path == '/api/library/import':
