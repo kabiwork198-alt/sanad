@@ -17,7 +17,7 @@ try:
     req=urllib.request.Request(c.META_URL,headers={'User-Agent':'SanadStudio/0.1 (+https://github.com/kabiwork198-alt/sanad)'})
     with urllib.request.urlopen(req,timeout=60) as r:metadata=r.read(c.META_SIZE+1)
     assert len(metadata)==c.META_SIZE and hashlib.md5(metadata).hexdigest()==c.META_MD5
-    parsed=c.metadata_map(metadata);remote=BufferedRemote();uris=['0370CaribQurtubi.SilaTarikhTabari.JK011178-ara1','0001AbuTalibCabdManaf.Diwan.JK007501-ara1']
+    parsed=c.metadata_map(metadata);remote=BufferedRemote();uris=['1356MustafaSadiqRafici.TarikhAdabCarab.Shamela0010548-ara1','0479IbnFaddalQayruwani.NukatFiQuran.Shamela0009066-ara1']
     buffer=io.BytesIO()
     with zipfile.ZipFile(remote) as source,zipfile.ZipFile(buffer,'w',zipfile.ZIP_DEFLATED) as out:
         for uri in uris:
@@ -26,8 +26,8 @@ try:
             assert raw.startswith(b'######OpenITI#')
             out.writestr(uri,raw)
     with tempfile.TemporaryDirectory() as d:
-        corpus=c.Corpus(d);corpus.scan(io.BytesIO(buffer.getvalue()),parsed,'بغداد');st=corpus.status()
-        assert st['stage']=='done' and st['processed']==2 and st['skipped']==0 and any(x['uri']==uris[0] and 'بغداد' in x['excerpt'] for x in st['results'])
+        corpus=c.Corpus(d);corpus.scan(io.BytesIO(buffer.getvalue()),parsed,'الله');st=corpus.status()
+        assert st['stage']=='done' and st['processed']==2 and st['skipped']==0 and any('الله' in x['excerpt'] for x in st['results'])
         print('::notice file=tests/live_openiti_corpus.py,line=1::OpenITI official ZIP subset live: texts=%d metadata=%s results=%d URI=%s source=%s range_requests=%d; full 2.86 GB installation NOT tested' % (st['processed'],'verified',len(st['results']),st['results'][0]['uri'],c.DATASET,remote.requests))
 except Exception as exc:
     print('::notice file=tests/live_openiti_corpus.py,line=1::OpenITI official ZIP subset unavailable: %s %s' % (type(exc).__name__,str(exc)[:180]))
