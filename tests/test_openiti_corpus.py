@@ -50,6 +50,14 @@ class CorpusTests(unittest.TestCase):
         with mock.patch.object(c,'MAX_RESULTS',1):
             self.c.search('بغداد');self.c.thread.join(10);s=self.c.status()
         self.assertTrue(s['partial']);self.assertEqual(len(s['results']),1);self.assertLess(s['processed'],s['total'])
+    def test_search_pagination_scans_again_and_advances(self):
+        self.run_install()
+        with mock.patch.object(c,'MAX_RESULTS',1):
+            self.c.search('بغداد');self.c.thread.join(10);first=self.c.status()
+            self.c.search('بغداد',1);self.c.thread.join(10);second=self.c.status()
+        self.assertEqual(first['results'][0]['uri'],U1);self.assertEqual(second['results'][0]['uri'],U2);self.assertEqual(second['offset'],1)
+        for invalid in (-1,20001,'1',True):
+            with self.assertRaises(ValueError):self.c.search('بغداد',invalid)
     def test_cancel_does_not_replace_existing_data(self):
         self.c.cancel_event.set()
         with self.assertRaises(c.Cancelled):self.c.scan(io.BytesIO(self.zip),c.metadata_map(self.meta),'بغداد')

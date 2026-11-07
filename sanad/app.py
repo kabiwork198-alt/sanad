@@ -358,7 +358,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/openiti/corpus/book':
                 return self.send(200, corpus_manager().read_book(body.get('uri')))
             if path == '/api/openiti/corpus/search':
-                corpus_manager().search(body.get('query')); return self.send(200, {'ok':True})
+                corpus_manager().search(body.get('query'),body.get('offset',0)); return self.send(200, {'ok':True})
             if path == '/api/openiti/corpus/cancel':
                 return self.send(200, {'cancelled':corpus_manager().cancel()})
             if path == '/api/openiti/corpus/remove':

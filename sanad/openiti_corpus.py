@@ -58,7 +58,7 @@ class Corpus:
     def __init__(self,root):
         self.root=Path(root)/'openiti-corpus';self.zip=self.root/'OpenITI-pri-data_v9.zip';self.part=self.root/'OpenITI-pri-data_v9.zip.part';self.meta=self.root/'metadata.tsv';self.marker=self.root/'verified.json'
         self.lock=threading.Lock();self.cancel_event=threading.Event();self.thread=None
-        self.state={'stage':'idle','error':'','processed':0,'total':0,'bytes':0,'expected_bytes':ARCHIVE_SIZE,'results':[],'partial':False,'query':'','skipped':0}
+        self.state={'stage':'idle','error':'','processed':0,'total':0,'bytes':0,'expected_bytes':ARCHIVE_SIZE,'results':[],'partial':False,'query':'','skipped':0,'offset':0}
     def _update(self,**kw):
         with self.lock:self.state.update(kw)
     def installed(self):
@@ -72,7 +72,7 @@ class Corpus:
     def _start(self,fn,**state):
         with self.lock:
             if self.thread and self.thread.is_alive():raise ValueError('توجد مهمة OpenITI قيد التنفيذ؛ أوقفها أو انتظر انتهاءها')
-            self.cancel_event.clear();self.state={'stage':'starting','error':'','processed':0,'total':0,'bytes':0,'expected_bytes':ARCHIVE_SIZE,'results':[],'partial':False,'query':'','skipped':0,**state}
+            self.cancel_event.clear();self.state={'stage':'starting','error':'','processed':0,'total':0,'bytes':0,'expected_bytes':ARCHIVE_SIZE,'results':[],'partial':False,'query':'','skipped':0,'offset':0,**state}
             self.thread=threading.Thread(target=self._run,args=(fn,),daemon=True);self.thread.start()
     def _run(self,fn):
         try:fn()
@@ -138,16 +138,17 @@ class Corpus:
         with self.lock:
             if self.thread and self.thread.is_alive():raise ValueError('أوقف المهمة أولًا وانتظر انتهاءها')
             for path in (self.zip,self.part,self.meta,self.marker):path.unlink(missing_ok=True)
-            self.state={'stage':'idle','error':'','processed':0,'total':0,'bytes':0,'expected_bytes':ARCHIVE_SIZE,'results':[],'partial':False,'query':'','skipped':0}
+            self.state={'stage':'idle','error':'','processed':0,'total':0,'bytes':0,'expected_bytes':ARCHIVE_SIZE,'results':[],'partial':False,'query':'','skipped':0,'offset':0}
 
-    def search(self,query):
+    def search(self,query,offset=0):
         if not self.installed():raise ValueError('المجموعة غير مثبتة؛ نزّلها أولًا')
         if not isinstance(query,str) or not 2<=len(query.strip())<=150 or not normalize(query.strip()).strip():raise ValueError('أدخل عبارة بحث من حرفين إلى 150 حرفًا')
-        query=query.strip();self._start(lambda:self._search(query),query=query)
-    def _search(self,query):
+        if type(offset) is not int or not 0<=offset<=20000:raise ValueError('صفحة النتائج غير صالحة')
+        query=query.strip();self._start(lambda:self._search(query,offset),query=query,offset=offset)
+    def _search(self,query,offset):
         data=self.meta.read_bytes()
         if len(data)!=META_SIZE or hashlib.md5(data).hexdigest()!=META_MD5:raise ValueError('بيانات المجموعة تالفة؛ أعد تثبيتها')
-        self.scan(self.zip,metadata_map(data),query)
+        self.scan(self.zip,metadata_map(data),query,offset)
     def read_book(self,uri):
         if not self.installed():raise ValueError('المجموعة غير مثبتة')
         if not isinstance(uri,str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,250}',uri):raise ValueError('معرّف النسخة غير صالح')
@@ -167,9 +168,9 @@ class Corpus:
         except UnicodeError as exc:raise ValueError('ترميز النسخة غير مدعوم') from exc
         return {'uri':uri,'text':text,'title':item['title_ar'] or item['title_lat'] or uri,'author':item['author_ar'] or item['author_lat'],'edition':item['ed_info'],'url':DATASET,'warning':WARNING}
 
-    def scan(self,archive,metadata,query):
+    def scan(self,archive,metadata,query,offset=0):
         needle=normalize(query);self._update(stage='searching',query=query)
-        count=0;skipped=0;matches=[];limit_reached=False;books_capped=0
+        count=0;skipped=0;matches=[];limit_reached=False;books_capped=0;seen=0
         with zipfile.ZipFile(archive) as z:
             entries=[x for x in z.infolist() if not x.is_dir()];total=len(entries);self._update(total=total)
             for info in entries:
@@ -194,8 +195,11 @@ class Corpus:
                                     at=normal.find(needle,at+1);continue
                                 line=max(1,line_base-overlap.count('\n')+combined[:idx].count('\n'))
                                 start=max(0,idx-250);snippet=('…' if start else '')+combined[start:start+1000]+('…' if len(combined)>start+1000 else '')
-                                matches.append({'uri':name,'title':m['title_ar'] or m['title_lat'] or name,'author':m['author_ar'] or m['author_lat'],'edition':m['ed_info'],'location':f'السطر التقريبي {line} في نص OpenITI الخام','excerpt':snippet,'url':DATASET})
-                                last_offset=absolute;book_hits+=1;self._update(results=list(matches))
+                                seen+=1
+                                if seen>offset:
+                                    matches.append({'uri':name,'title':m['title_ar'] or m['title_lat'] or name,'author':m['author_ar'] or m['author_lat'],'edition':m['ed_info'],'location':f'السطر التقريبي {line} في نص OpenITI الخام','excerpt':snippet,'url':DATASET})
+                                    self._update(results=list(matches))
+                                last_offset=absolute;book_hits+=1
                                 break
                             if len(matches)>=MAX_RESULTS:limit_reached=True;break
                             if book_hits>=MAX_PER_BOOK:books_capped+=1;break
