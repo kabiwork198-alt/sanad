@@ -79,6 +79,8 @@ jobs:
           exit "$status"
       - name: Diagnose Turath MCP real browser initialization
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_turath_browser.cjs
+      - name: Diagnose official OpenITI release ZIP directory
+        run: python tests/probe_openiti_release.py
       - name: Probe Internet Archive text access in a browser
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_archive.cjs
       - name: Test Internet Archive OCR import in browser and local app
