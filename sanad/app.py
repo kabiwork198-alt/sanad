@@ -42,7 +42,7 @@ DB = DATA / 'sanad.sqlite3'
 HOST, PORT = '127.0.0.1', 8765
 TOKEN = secrets.token_urlsafe(32)
 MAX_BODY = 5 * 1024 * 1024
-COLLECTIONS = ('signals', 'sources', 'claims', 'scenes', 'events')
+COLLECTIONS = ('signals', 'sources', 'claims', 'scenes', 'events', 'evidence')
 
 
 def connect():
@@ -85,6 +85,16 @@ def validate_project(project):
         if event.get('sourceId') and event['sourceId'] not in source_ids:
             raise ValueError('الحدث يشير إلى مصدر غير موجود')
     statuses = {'لم يُفحص', 'مدعوم', 'محل خلاف', 'غير مدعوم', 'يتعذر التحقق'}
+    claim_ids = [c['id'] for c in project.get('claims', []) if c.get('id')]
+    if any(not re.fullmatch(r'[a-f0-9]{32}', ident) for ident in claim_ids) or len(set(claim_ids)) != len(claim_ids):
+        raise ValueError('معرّفات الادعاءات غير صالحة أو مكررة')
+    for entry in project.get('evidence', []):
+        if entry.get('claimId') not in claim_ids:
+            raise ValueError('دليل المقارنة يشير إلى ادعاء غير موجود')
+        if entry.get('sourceId') and entry['sourceId'] not in source_ids:
+            raise ValueError('دليل المقارنة يشير إلى مصدر غير موجود')
+        if entry.get('stance', 'غير محسوم') not in {'يدعم', 'يخالف', 'يضيف سياقًا', 'غير محسوم'}:
+            raise ValueError('موقف دليل المقارنة غير صالح')
     for claim in project.get('claims', []):
         if claim.get('status', 'لم يُفحص') not in statuses:
             raise ValueError('حالة الادعاء غير صالحة')
@@ -192,9 +202,9 @@ def research_search(query):
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'DOI: ' + x['doi'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_crossref(query)]
     def openlibrary():
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'سنة طبعة مفهرسة: ' + x['year'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_openlibrary(query)]
-    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query))]
+    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
     results, states = [], []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=9) as pool:
         futures = [(name, pool.submit(fn)) for name, fn in providers]
         for name, future in futures:
             try:

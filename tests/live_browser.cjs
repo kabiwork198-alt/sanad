@@ -30,6 +30,10 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
   const result=await page.evaluate(()=>researchResult);
   for(const p of result.providers)report('Browser '+p.provider+': '+p.status+' / '+p.count);
   report('Browser visible result cards: '+(await page.$$('[data-research-result]')).length);
+  await page.$eval('#research-query',e=>e.value='');await page.type('#research-query','Baghdad');await page.click('#research-search');
+  await page.waitForFunction(()=>typeof researchResult!=='undefined'&&researchResult?.query==='Baghdad',{timeout:45000});
+  const archives=await page.evaluate(()=>researchResult.providers.filter(p=>p.provider==='المكتبة الرقمية العالمية'||p.provider==='صحف Chronicling America'));
+  for(const p of archives)report('Browser Baghdad '+p.provider+': '+p.status+' / '+p.count);
   if(errors.length)throw Error('Browser script errors: '+errors.join('; '));
  }finally{if(browser)await browser.close();server.close()}
 })().catch(err=>{console.error(err);process.exitCode=1});

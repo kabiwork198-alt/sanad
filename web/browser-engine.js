@@ -31,7 +31,7 @@ window.SANAD_BROWSER = true;
   function validate(p) {
     if (!p || typeof p !== 'object' || !/^[a-f0-9]{32}$/.test(p.id || '')) throw Error('صيغة المشروع غير صالحة');
     if (typeof p.title !== 'string' || !p.title.trim() || p.title.length > 200) throw Error('أدخل عنوانًا بين حرف و200 حرف');
-    for (const key of ['signals','sources','claims','scenes','events']) {
+    for (const key of ['signals','sources','claims','scenes','events','evidence']) {
       if (p[key] !== undefined && (!Array.isArray(p[key]) || p[key].length > 500 || p[key].some(v => !v || typeof v !== 'object' || Array.isArray(v) || Object.values(v).some(x => typeof x !== 'string' || x.length > 250000)))) throw Error('قائمة غير صالحة: ' + key);
     }
     for (const key of ['question','angle','audience','ideaStatus','researchNotes','outline','script','english','translationNotes','productionNotes','reviewNotes']) {
@@ -41,6 +41,13 @@ window.SANAD_BROWSER = true;
     const sources = p.sources || [];
     const ids = sources.map(s => s.id);
     if (ids.some(x => !/^[a-f0-9]{32}$/.test(x || '')) || new Set(ids).size !== ids.length) throw Error('معرّفات المصادر غير صالحة أو مكررة');
+    const claimIds=(p.claims||[]).map(c=>c.id).filter(Boolean);
+    if(claimIds.some(id=>!/^[a-f0-9]{32}$/.test(id))||new Set(claimIds).size!==claimIds.length)throw Error('معرّفات الادعاءات غير صالحة أو مكررة');
+    for(const entry of (p.evidence||[])) {
+      if(!claimIds.includes(entry.claimId))throw Error('دليل المقارنة يشير إلى ادعاء غير موجود');
+      if(entry.sourceId&&!ids.includes(entry.sourceId))throw Error('دليل المقارنة يشير إلى مصدر غير موجود');
+      if(!['يدعم','يخالف','يضيف سياقًا','غير محسوم'].includes(entry.stance||'غير محسوم'))throw Error('موقف دليل المقارنة غير صالح');
+    }
     for (const claim of (p.claims || [])) {
       if (!['لم يُفحص','مدعوم','محل خلاف','غير مدعوم','يتعذر التحقق'].includes(claim.status || 'لم يُفحص')) throw Error('حالة الادعاء غير صالحة');
       if (claim.sourceId && !ids.includes(claim.sourceId)) throw Error('الادعاء يشير إلى مصدر غير موجود');
@@ -66,7 +73,13 @@ window.SANAD_BROWSER = true;
       if (!trim(c.text)) issues.push(`الادعاء ${i+1} بلا نص.`);
       if (status !== 'مدعوم') issues.push(`الادعاء ${i+1}: حالته «${status}» ويحتاج معالجة بشرية قبل الاعتماد.`);
       if (!source || !trim(source.title) || !trim(c.location)) issues.push(`الادعاء ${i+1}: يحتاج مصدرًا مسمى وموضعًا محددًا.`);
-      if (trim(c.text) && status === 'مدعوم' && source && trim(source.title) && trim(c.location)) reviewed.push({text:trim(c.text),source:trim(source.title),location:trim(c.location),notes:trim(c.notes)});
+      const comparisons=(p.evidence||[]).filter(e=>c.id&&e.claimId===c.id).map(e=>{
+        const cited=byId.get(e.sourceId);
+        if(!cited||!trim(cited.title)||!trim(e.location))issues.push(`دليل مقارنة للادعاء ${i+1}: يحتاج مصدرًا مسمى وموضعًا.`);
+        if(e.stance==='يخالف')issues.push(`الادعاء ${i+1}: يوجد دليل مخالف سجله المستخدم؛ راجع الخلاف ولا تحذفه من المعالجة.`);
+        return {source:trim(cited?.title)||'مصدر غير محدد',location:trim(e.location)||'موضع غير محدد',stance:e.stance||'غير محسوم',excerpt:trim(e.excerpt),notes:trim(e.notes)};
+      });
+      if (trim(c.text) && status === 'مدعوم' && source && trim(source.title) && trim(c.location)) reviewed.push({text:trim(c.text),source:trim(source.title),location:trim(c.location),notes:trim(c.notes),comparisons});
     });
     return {issues, reviewed_claims:reviewed, counts:{signals:signals.length,sources:sources.length,claims:claims.length,reviewed:reviewed.length}, warning:'الفحص تنظيمي فقط؛ لا يثبت صحة الادعاءات أو الاستشهادات، ولا يغني عن مراجعة المصادر والخلافات والحقوق بشريًا.'};
   }
@@ -76,7 +89,7 @@ window.SANAD_BROWSER = true;
     const lines = ['مسودة تحريرية للمراجعة — ليست نصًا معتمدًا للنشر','','العنوان: '+trim(p.title),'','المقدمة:','[اكتب افتتاحية لا تعد بأكثر مما تثبته المصادر.]'];
     if (trim(p.question)) lines.push('سؤال الحلقة (صياغة المستخدم): '+trim(p.question));
     lines.push('','المتن:');
-    r.reviewed_claims.forEach((c,i) => {lines.push(`${i+1}. ${c.text}`,`   [مرجع للمراجعة: ${c.source}، ${c.location}]`);if(c.notes)lines.push(`   [ملاحظات الباحث للمراجعة وليست للتعليق الصوتي: ${c.notes}]`);});
+    r.reviewed_claims.forEach((c,i) => {lines.push(`${i+1}. ${c.text}`,`   [مرجع للمراجعة: ${c.source}، ${c.location}]`);if(c.notes)lines.push(`   [ملاحظات الباحث للمراجعة وليست للتعليق الصوتي: ${c.notes}]`);for(const e of c.comparisons){lines.push(`   [دليل إضافي كما سجّله المستخدم: ${e.stance} — ${e.source}، ${e.location}]`);if(e.excerpt)lines.push(`   [نص للمطابقة مع الأصل: ${e.excerpt}]`);if(e.notes)lines.push(`   [ملاحظات المقارنة: ${e.notes}]`);}});
     lines.push('','الخاتمة:','[اكتب خلاصة متوازنة تعكس حدود الأدلة والخلافات.]','','ملاحظات للمراجع:','لا تمثل حالة «مدعوم» تحققًا آليًا. راجع نصوص المصادر والاقتباسات والسياق والخلافات قبل النشر.');
     const excluded = (p.claims || []).length-r.reviewed_claims.length;
     if (excluded) lines.push(`لم تُدرج ${excluded} من الادعاءات لأنها لم تستوفِ شروط هذه المسودة؛ راجعها ولا تُخفِ خلافًا مؤثرًا.`);
@@ -141,9 +154,20 @@ window.SANAD_BROWSER = true;
     const d=await getJSON('https://archive.org/advancedsearch.php?'+p.toString());
     return (d.response?.docs||[]).filter(x=>typeof x.identifier==='string'&&/^[A-Za-z0-9._-]{1,100}$/.test(x.identifier)).map(x=>({title:String(Array.isArray(x.title)?x.title[0]:(x.title||x.identifier)).slice(0,300),url:'https://archive.org/details/'+x.identifier,author:String(Array.isArray(x.creator)?x.creator.slice(0,5).join(', '):(x.creator||'')).slice(0,300),detail:'سنة النشر المفهرسة: '+String(x.year||'غير معروفة')+'؛ قد يكون السجل غير دقيق أو مكررًا.',access:'سجل كتاب في Internet Archive؛ لا يضمن الإتاحة أو التنزيل أو الترخيص.'}));
   }
+  async function loc(q, collection) {
+    if(!['world-digital-library','chronicling-america'].includes(collection))throw Error('مجموعة غير مدعومة');
+    const p={fo:'json',at:'results',c:'8',...(collection==='chronicling-america'?{dl:'page',qs:q}:{q})};
+    const d=await getJSON('https://www.loc.gov/collections/'+collection+'/?'+params(p));
+    return (d.results||[]).flatMap(x=>{
+      let url;try{url=new URL(x.url||x.id||'');if(!['www.loc.gov','loc.gov'].includes(url.hostname)||!['http:','https:'].includes(url.protocol)||url.username||url.password)return [];url.protocol='https:';}catch{return [];}
+      const date=String(x.date||'غير معروف').slice(0,100),kind=Array.isArray(x.original_format)?x.original_format.slice(0,4).join(', '):String(x.original_format||'');
+      const note=collection==='chronicling-america'?'صفحة صحيفة أمريكية؛ تحقق من التاريخ وصورة الصفحة وأخطاء OCR. ':'';
+      return [{title:String(Array.isArray(x.title)?(x.title[0]||'بلا عنوان'):(x.title||'بلا عنوان')).slice(0,300),url:url.href,author:'مكتبة الكونغرس / الجهة الحافظة كما في السجل',detail:'التاريخ في السجل: '+date+'؛ النوع: '+note+(kind||'غير محدد')+'؛ قد يشير التاريخ إلى النشر أو إنشاء المادة لا إلى الحدث.',access:'سجل أرشيفي؛ لم تُقرأ المادة أو يثبت ترخيص استخدامها. '+(x.access_restricted===true?'يذكر السجل وجود تقييد.':'تحقق من الإتاحة والحقوق في السجل.')}];
+    });
+  }
   async function research(q) {
     q=queryText(q);
-    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['Internet Archive',()=>internetArchive(q)]];
+    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['Internet Archive',()=>internetArchive(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')]];
     const outcomes=await Promise.all(providers.map(async ([provider,fn])=>{try{const items=await fn();return {provider,items,status:'اكتمل'};}catch{return {provider,items:[],status:'تعذر الاتصال أو قراءة الاستجابة'};}}));
     return {query:q,searched_at:new Date().toISOString(),providers:outcomes.map(x=>({provider:x.provider,status:x.status,count:x.items.length})),results:outcomes.flatMap(x=>x.items.map(item=>({...item,provider:x.provider}))),warning};
   }

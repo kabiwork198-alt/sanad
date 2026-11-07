@@ -41,8 +41,21 @@ def analyze(project):
             issues.append(f'الادعاء {i}: حالته «{status}» ويحتاج معالجة بشرية قبل الاعتماد.')
         if not source or not source.get('title', '').strip() or not claim.get('location', '').strip():
             issues.append(f'الادعاء {i}: يحتاج مصدرًا مسمى وموضعًا محددًا.')
+        comparisons = []
+        for evidence in project.get('evidence', []):
+            if not claim.get('id') or evidence.get('claimId') != claim['id']:
+                continue
+            cited = source_map.get(evidence.get('sourceId', ''))
+            if not cited or not cited.get('title', '').strip() or not evidence.get('location', '').strip():
+                issues.append(f'دليل مقارنة للادعاء {i}: يحتاج مصدرًا مسمى وموضعًا.')
+            if evidence.get('stance') == 'يخالف':
+                issues.append(f'الادعاء {i}: يوجد دليل مخالف سجله المستخدم؛ راجع الخلاف ولا تحذفه من المعالجة.')
+            comparisons.append({'source': (cited or {}).get('title', '').strip() or 'مصدر غير محدد',
+                                'location': evidence.get('location', '').strip() or 'موضع غير محدد',
+                                'stance': evidence.get('stance', 'غير محسوم'),
+                                'excerpt': evidence.get('excerpt', '').strip(), 'notes': evidence.get('notes', '').strip()})
         if text and status == 'مدعوم' and source and source.get('title', '').strip() and claim.get('location', '').strip():
-            ready.append({'text': text, 'source': source['title'].strip(), 'location': claim['location'].strip(), 'notes': claim.get('notes', '').strip()})
+            ready.append({'text': text, 'source': source['title'].strip(), 'location': claim['location'].strip(), 'notes': claim.get('notes', '').strip(), 'comparisons': comparisons})
     return {'issues': issues, 'reviewed_claims': ready, 'counts': {'signals': len(signals), 'sources': len(sources), 'claims': len(claims), 'reviewed': len(ready)}, 'warning': 'الفحص تنظيمي فقط؛ لا يثبت صحة الادعاءات أو الاستشهادات، ولا يغني عن مراجعة المصادر والخلافات والحقوق بشريًا.'}
 
 
@@ -58,6 +71,12 @@ def script_draft(project):
         lines.extend([f'{index}. {claim["text"]}', f'   [مرجع للمراجعة: {claim["source"]}، {claim["location"]}]'])
         if claim['notes']:
             lines.append(f'   [ملاحظات الباحث للمراجعة وليست للتعليق الصوتي: {claim["notes"]}]')
+        for evidence in claim['comparisons']:
+            lines.append(f'   [دليل إضافي كما سجّله المستخدم: {evidence["stance"]} — {evidence["source"]}، {evidence["location"]}]')
+            if evidence['excerpt']:
+                lines.append(f'   [نص للمطابقة مع الأصل: {evidence["excerpt"]}]')
+            if evidence['notes']:
+                lines.append(f'   [ملاحظات المقارنة: {evidence["notes"]}]')
     lines.extend(['', 'الخاتمة:', '[اكتب خلاصة متوازنة تعكس حدود الأدلة والخلافات.]', '', 'ملاحظات للمراجع:', 'لا تمثل حالة «مدعوم» تحققًا آليًا. راجع نصوص المصادر والاقتباسات والسياق والخلافات قبل النشر.'])
     excluded = len(project.get('claims', [])) - len(report['reviewed_claims'])
     if excluded:

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from sanad import app, library, wikipedia, catalogs
+from sanad import app, library, wikipedia, catalogs, workflow
 
 
 def simple_pdf():
@@ -74,7 +74,9 @@ class FederatedSearchTest(unittest.TestCase):
              mock.patch('sanad.app.search_commons', return_value=[]), \
              mock.patch('sanad.app.wikipedia.citations', return_value=[]), \
              mock.patch('sanad.app.catalogs.wikisource', return_value=[]), \
-             mock.patch('sanad.app.catalogs.internet_archive', return_value=[]):
+             mock.patch('sanad.app.catalogs.internet_archive', return_value=[]), \
+             mock.patch('sanad.app.catalogs.loc', return_value=[]), \
+             mock.patch('sanad.app.catalogs.national_archives', return_value=[]):
             result = app.research_search('example')
         self.assertEqual(len(result['results']), 1)
         self.assertEqual(result['results'][0]['provider'], 'Open Library')
@@ -99,6 +101,25 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(len(items),1)
         self.assertEqual(items[0]['url'],'https://ar.wikisource.org/?curid=39899')
         self.assertIn('لم يُقرأ',items[0]['access'])
+
+    def test_loc_preserves_date_without_equating_it_to_event(self):
+        data={'results':[{'title':'A map', 'date':'1900', 'url':'http://www.loc.gov/item/123/', 'original_format':['map']}, {'title':'Spoof', 'url':'https://www.loc.gov.evil.test/item/1'}]}
+        with mock.patch('sanad.catalogs.get_json',return_value=data):
+            items=catalogs.loc('Baghdad','world-digital-library')
+        self.assertEqual(len(items),1)
+        self.assertEqual(items[0]['url'],'https://www.loc.gov/item/123/')
+        self.assertIn('1900',items[0]['detail'])
+        self.assertIn('لا إلى الحدث',items[0]['detail'])
+        with self.assertRaises(ValueError): catalogs.loc('x','invalid')
+
+    def test_national_archive_attributes_holding_institution(self):
+        data={'records':[{'id':'N13986981', 'title':'Archive', 'heldBy':['Palestine Exploration Fund'], 'coveringDates':'1870-1901', 'reference':'XYZ'}, {'id':'../bad','title':'spoof'}]}
+        with mock.patch('sanad.catalogs.get_json',return_value=data):
+            items=catalogs.national_archives('Palestine')
+        self.assertEqual(len(items),1)
+        self.assertIn('Palestine Exploration Fund',items[0]['author'])
+        self.assertIn('سجل فهرسي فقط',items[0]['access'])
+        self.assertTrue(items[0]['url'].endswith('/N13986981'))
 
     def test_archive_validates_identifiers_and_quotes_query(self):
         data={'response':{'docs':[{'identifier':'good-item','title':'Book','creator':['A','B'],'year':2000},{'identifier':'../bad','title':'bad'}]}}
@@ -126,6 +147,26 @@ class WikipediaTest(unittest.TestCase):
         self.assertIn('cite_note-1', result[0]['url'])
         self.assertIn('صفحة ١٠', result[0]['title'])
         self.assertIn('لم يُقرأ', result[0]['access'])
+
+
+class CrossCheckingTest(unittest.TestCase):
+    def test_multiple_source_evidence_is_saved_and_contradiction_is_visible(self):
+        claim_id, s1, s2 = 'c'*32, 'a'*32, 'b'*32
+        project={'id':'d'*32,'title':'Comparison','sources':[{'id':s1,'title':'First'}, {'id':s2,'title':'Second'}],
+                 'claims':[{'id':claim_id,'text':'Claim','status':'مدعوم','sourceId':s1,'location':'p.1'}],
+                 'evidence':[{'claimId':claim_id,'sourceId':s2,'stance':'يخالف','location':'p.2','excerpt':'Alternate account'}]}
+        app.validate_project(project)
+        result=workflow.analyze(project)
+        self.assertTrue(any('دليل مخالف' in x for x in result['issues']))
+        draft=workflow.script_draft(project)['text']
+        self.assertIn('Second',draft)
+        self.assertIn('يخالف',draft)
+        self.assertIn('Alternate account',draft)
+        project['evidence'][0]['sourceId']='e'*32
+        with self.assertRaises(ValueError): app.validate_project(project)
+        project['evidence'][0]['sourceId']=s2
+        project['evidence'][0]['claimId']='f'*32
+        with self.assertRaises(ValueError): app.validate_project(project)
 
 
 class ChronologyTest(unittest.TestCase):
