@@ -53,6 +53,14 @@ class CorpusTests(unittest.TestCase):
     def test_cancel_does_not_replace_existing_data(self):
         self.c.cancel_event.set()
         with self.assertRaises(c.Cancelled):self.c.scan(io.BytesIO(self.zip),c.metadata_map(self.meta),'بغداد')
+    def test_overlap_match_does_not_mask_new_hit(self):
+        # The old match falls in the 512-character overlap; the next hit is new.
+        raw=('x'*(65536-5)+'بغداد'+'z'*400+'بغداد').encode()
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,'w',zipfile.ZIP_DEFLATED) as z:z.writestr(U1,raw)
+        metadata=c.metadata_map(self.meta);self.c.scan(io.BytesIO(buf.getvalue()),metadata,'بغداد');s=self.c.status()
+        self.assertEqual(len(s['results']),2);self.assertTrue(s['partial'])
+        self.assertIn('بغداد',s['results'][1]['excerpt'])
     def test_normalization_parity(self):
         for x in ['بَغْدَاد','إِلَى','ﷲ','وَالعربية','Straße','المَدِينة']:
             self.assertEqual(c.normalize(x),c.library.normalize(x))

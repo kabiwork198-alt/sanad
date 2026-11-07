@@ -161,6 +161,7 @@ class Corpus:
                 if info.file_size>16*1024*1024 or info.is_dir() or info.flag_bits&1:raise ValueError('النص أكبر من 16 ميجابايت أو غير متاح للحفظ؛ استخدم المقتطفات أو افتح المصدر')
                 with z.open(info) as f:raw=f.read(16*1024*1024+1)
         except KeyError as exc:raise ValueError('النسخة غير موجودة في الأرشيف') from exc
+        except (zipfile.BadZipFile,RuntimeError,EOFError) as exc:raise ValueError('تعذر قراءة النسخة من الأرشيف؛ قد يكون تالفًا') from exc
         if not raw or len(raw)>16*1024*1024:raise ValueError('حجم النص غير صالح')
         try:text=raw.decode('utf-8-sig')
         except UnicodeError as exc:raise ValueError('ترميز النسخة غير مدعوم') from exc
@@ -182,18 +183,22 @@ class Corpus:
                             self._check();chunk=stream.read(65536)
                             if not chunk:break
                             combined=overlap+chunk;normal=normalize(combined);at=normal.find(needle)
-                            if at>=0:
+                            while at>=0:
                                 normalized_count=0;idx=0
                                 for idx,ch in enumerate(combined):
                                     normalized_count+=len(normalize(ch))
                                     if normalized_count>at:break
                                 absolute=position-len(overlap)+idx
-                                if absolute>last_offset:
-                                    line=max(1,line_base-overlap.count('\n')+combined[:idx].count('\n'))
-                                    matches.append({'uri':name,'title':m['title_ar'] or m['title_lat'] or name,'author':m['author_ar'] or m['author_lat'],'edition':m['ed_info'],'location':f'السطر التقريبي {line} في نص OpenITI الخام','excerpt':library.excerpt(combined,needle),'url':DATASET})
-                                    last_offset=absolute;book_hits+=1;self._update(results=list(matches))
-                                    if len(matches)>=MAX_RESULTS:limit_reached=True;break
-                                    if book_hits>=MAX_PER_BOOK:books_capped+=1;break
+                                if absolute<=last_offset:
+                                    # A previously returned hit in the overlap must not mask a new hit.
+                                    at=normal.find(needle,at+1);continue
+                                line=max(1,line_base-overlap.count('\n')+combined[:idx].count('\n'))
+                                start=max(0,idx-250);snippet=('…' if start else '')+combined[start:start+1000]+('…' if len(combined)>start+1000 else '')
+                                matches.append({'uri':name,'title':m['title_ar'] or m['title_lat'] or name,'author':m['author_ar'] or m['author_lat'],'edition':m['ed_info'],'location':f'السطر التقريبي {line} في نص OpenITI الخام','excerpt':snippet,'url':DATASET})
+                                last_offset=absolute;book_hits+=1;self._update(results=list(matches))
+                                break
+                            if len(matches)>=MAX_RESULTS:limit_reached=True;break
+                            if book_hits>=MAX_PER_BOOK:books_capped+=1;break
                             position+=len(chunk);line_base+=chunk.count('\n');overlap=combined[-512:]
                     count+=1
                 except (UnicodeError,zipfile.BadZipFile,RuntimeError,OSError):
