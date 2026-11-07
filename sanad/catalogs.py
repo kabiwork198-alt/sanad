@@ -160,3 +160,57 @@ def read_wikisource(page_id):
             'timestamp':str(revision.get('timestamp') or ''), 'text':text,
             'revision_url':'https://ar.wikisource.org/w/index.php?oldid='+str(rev),
             'warning':'النص خام بصيغة ويكي وقد يكون فهرسًا أو جزءًا من كتاب، لا كتابًا كاملًا. رقم السطر ليس رقم صفحة الطبعة. تحقق من النسخة والترخيص وطابقها مع المصدر.'}
+
+
+def wikisource_other(query, language):
+    """Search fixed Wikisource language editions; records are not yet texts."""
+    labels = {'en':'الإنجليزية', 'fr':'الفرنسية'}
+    if language not in labels: raise ValueError('لغة ويكي مصدر غير مدعومة')
+    data = get_json('https://' + language + '.wikisource.org/w/api.php', {'action':'query','list':'search','srsearch':query,'srnamespace':'0','srlimit':'10','format':'json','formatversion':'2'})
+    items = []
+    for item in data.get('query', {}).get('search', []):
+        ident, title = item.get('pageid'), item.get('title')
+        if isinstance(ident, int) and not isinstance(ident, bool) and ident > 0 and isinstance(title, str) and title.strip():
+            items.append({'title':title[:300], 'url':f'https://{language}.wikisource.org/?curid={ident}', 'author':'',
+                          'detail':'نتيجة في ويكي مصدر '+labels[language]+'؛ راجع النسخة والطبعة والترجمة.',
+                          'access':'سجل صفحة؛ لم يُقرأ النص بعد. راجع الترخيص والسياق.'})
+    return items
+
+
+def read_wikisource_rendered(page_id, language):
+    """Extract bounded plain text from one rendered Wikisource page, never execute HTML."""
+    from html.parser import HTMLParser
+    if language not in ('ar', 'en', 'fr'): raise ValueError('لغة ويكي مصدر غير مدعومة')
+    if not isinstance(page_id, str) or not re.fullmatch(r'[1-9][0-9]{0,12}', page_id):
+        raise ValueError('معرّف صفحة ويكي مصدر غير صالح')
+    data = get_json('https://' + language + '.wikisource.org/w/api.php', {'action':'parse','pageid':page_id,'prop':'text|revid','format':'json','formatversion':'2'})
+    item = data.get('parse') if isinstance(data, dict) else None
+    if not isinstance(item, dict) or str(item.get('pageid')) != page_id or not isinstance(item.get('revid'), int) or isinstance(item.get('revid'), bool) or item['revid'] <= 0 or not isinstance(item.get('text'), str):
+        raise ValueError('الصفحة المعروضة غير متاحة أو استجابة ويكي غير صالحة')
+    class PlainText(HTMLParser):
+        blocks = {'p','div','br','li','tr','h1','h2','h3','h4','h5','h6','section','blockquote'}
+        excluded = {'script','style','noscript','iframe','object','svg','canvas'}
+        def __init__(self):
+            super().__init__(convert_charrefs=True); self.parts=[]; self.skip_tag=None; self.skip_depth=0
+        def handle_starttag(self, tag, attrs):
+            if self.skip_tag:
+                if tag == self.skip_tag: self.skip_depth += 1
+            elif tag in self.excluded: self.skip_tag=tag; self.skip_depth=1
+            elif tag in self.blocks: self.parts.append('\n')
+        def handle_startendtag(self, tag, attrs):
+            if not self.skip_tag and tag in self.blocks: self.parts.append('\n')
+        def handle_endtag(self, tag):
+            if self.skip_tag:
+                if tag == self.skip_tag:
+                    self.skip_depth -= 1
+                    if not self.skip_depth: self.skip_tag=None
+            elif tag in self.blocks: self.parts.append('\n')
+        def handle_data(self, value):
+            if not self.skip_tag: self.parts.append(value)
+    parser=PlainText();parser.feed(item['text']);text=''.join(parser.parts).strip()
+    if not text or len(text.encode('utf-8')) > 1_800_000:
+        raise ValueError('النص غير متاح أو أكبر من الحد الآمن')
+    rev = str(item['revid'])
+    return {'title':str(item.get('title') or 'بلا عنوان')[:300], 'page_id':page_id, 'language':language, 'revision_id':rev,
+            'revision_url':'https://'+language+'.wikisource.org/w/index.php?oldid='+rev, 'text':text,
+            'warning':'نص آلي مستخرج من صفحة معروضة وقد يضم ترويسات وحواشي أو أخطاء؛ المراجعة تخص الصفحة وقد يتغير المحتوى المضمّن والقوالب. رقم السطر ليس صفحة الطبعة. راجع صورة المصدر والطبعة والترجمة والحقوق.'}

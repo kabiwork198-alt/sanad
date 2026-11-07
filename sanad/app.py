@@ -220,7 +220,7 @@ def research_search(query, provider=None):
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'DOI: ' + x['doi'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_crossref(query)]
     def openlibrary():
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'سنة طبعة مفهرسة: ' + x['year'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_openlibrary(query)]
-    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('DOAJ', lambda: catalogs.doaj(query)), ('OpenAlex', lambda: catalogs.openalex(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('مخطوطات مالي الإسلامية', lambda: catalogs.loc(query, 'islamic-manuscripts-from-mali')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
+    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('ويكي مصدر الإنجليزية', lambda: catalogs.wikisource_other(query, 'en')), ('ويكي مصدر الفرنسية', lambda: catalogs.wikisource_other(query, 'fr')), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('DOAJ', lambda: catalogs.doaj(query)), ('OpenAlex', lambda: catalogs.openalex(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('مخطوطات مالي الإسلامية', lambda: catalogs.loc(query, 'islamic-manuscripts-from-mali')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
     if provider is not None:
         if not isinstance(provider, str) or provider not in [name for name, _ in providers]:
             raise ValueError('المصدر غير مدعوم')
@@ -309,6 +309,8 @@ class Handler(BaseHTTPRequestHandler):
             path = urllib.parse.urlsplit(self.path).path
             if path == '/api/topics':
                 return self.send(200, {'topics': wikipedia.topics(), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
+            if path == '/api/wikisource/rendered':
+                return self.send(200, catalogs.read_wikisource_rendered(body.get('page_id', ''), body.get('language', '')))
             if path == '/api/wikisource/read':
                 return self.send(200, catalogs.read_wikisource(body.get('page_id', '')))
             if path == '/api/internet-archive/read':

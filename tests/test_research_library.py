@@ -74,6 +74,7 @@ class FederatedSearchTest(unittest.TestCase):
              mock.patch('sanad.app.search_commons', return_value=[]), \
              mock.patch('sanad.app.wikipedia.citations', return_value=[]), \
              mock.patch('sanad.app.catalogs.wikisource', return_value=[]), \
+             mock.patch('sanad.app.catalogs.wikisource_other', return_value=[]), \
              mock.patch('sanad.app.catalogs.internet_archive', return_value=[]), \
              mock.patch('sanad.app.catalogs.doaj', return_value=[]), \
              mock.patch('sanad.app.catalogs.openalex', return_value=[]), \
