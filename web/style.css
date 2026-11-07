@@ -49,3 +49,5 @@ nav{background:#f0f4ec;border:1px solid #e2ebdf;border-radius:12px;padding:5px;g
 
 .project-empty{font-size:12px;color:#6a8171;padding:3px 10px;margin:0;line-height:1.7}
 @media(max-width:760px){.project-empty{padding:4px 10px;white-space:nowrap}}
+
+#backup-password-dialog{width:min(94vw,480px);max-height:90vh;overflow:auto;border:1px solid #cfdfd1;border-radius:14px;padding:24px;box-shadow:0 12px 40px #0003}#backup-password-dialog::backdrop{background:#10291dbb}#backup-password-dialog h2{margin:0 0 8px}#backup-password-dialog .field{margin:12px 0}#backup-password-error{color:#9a302c}#export-encrypted{margin-top:8px}@media(max-width:760px){.side-bottom{flex-wrap:wrap}#export-encrypted{margin-top:0}}
