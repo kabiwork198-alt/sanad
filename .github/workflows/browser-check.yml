@@ -30,6 +30,8 @@ jobs:
         run: node tests/probe_shamela.cjs
       - name: Probe Turath MCP and browser access
         run: node tests/probe_turath.cjs
+      - name: Probe Alexandria Archive MCP
+        run: node tests/probe_alexandria.cjs
       - name: Probe official newspaper page text API
         run: node tests/probe_loc_text.cjs
       - name: Check public catalogs and browser CORS (diagnostic, services may be unavailable)
