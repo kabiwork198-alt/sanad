@@ -63,9 +63,9 @@ class Session:
         result = self.request('tools/call', {'name':tool,'arguments':args}, 2)
         if not isinstance(result, dict) or result.get('isError'): raise ValueError('تعذر تنفيذ بحث أرشيف الإسكندرية؛ تحقق من العبارة أو حد الخدمة')
         structured = result.get('structuredContent')
-        if isinstance(structured, dict): return structured
         content = result.get('content') or []
         if not isinstance(content, list): raise ValueError('صيغة استجابة أرشيف الإسكندرية غير مدعومة')
+        if isinstance(structured, dict): return {**structured, '_mcp_content':content}
         text = next((item.get('text') for item in content if isinstance(item, dict) and item.get('type') == 'text' and isinstance(item.get('text'), str)), '')
         try: parsed = json.loads(text)
         except (ValueError, TypeError) as exc: raise ValueError('صيغة استجابة أرشيف الإسكندرية غير مدعومة') from exc
@@ -109,7 +109,7 @@ def search(query):
 def read_article(article_id):
     if not isinstance(article_id,str) or not re.fullmatch(r'[1-9][0-9]{0,8}',article_id): raise ValueError('معرّف المقال غير صالح')
     ident=int(article_id);data=Session().call('get_article',{'id':ident})
-    access=data.get('access');content=data.get('content');url=canonical_url(data.get('url'))
+    access=data.get('access');content=data.get('_mcp_content');url=canonical_url(data.get('url'))
     if type(data.get('id')) is not int or data['id']!=ident or url != f'https://www.alexandria-archive.com/article/{ident}' or not isinstance(access,dict) or access.get('full') is not False or not isinstance(content,list):
         raise ValueError('لم يُرجع الأرشيف نبذة عامة قابلة للعرض؛ افتح المقال على الموقع')
     text='\n'.join(x['text'] for x in content if isinstance(x,dict) and x.get('type')=='text' and isinstance(x.get('text'),str))

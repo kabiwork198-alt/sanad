@@ -4,7 +4,7 @@ from unittest import mock
 from sanad import alexandria_archive as aa
 
 SEARCH={'results':[{'category':'article','title':'تاريخ الإسكندرية','id':2,'url':'https://www.alexandria-archive.com/article/2','snippet':'نبذة للمراجعة'},{'url':'https://www.alexandria-archive.com.evil.test/a','title':'bad'}]}
-ARTICLE={'id':2,'titleAr':'تاريخ الإسكندرية','author':'المؤلف','published':'2025-01-01','url':'https://www.alexandria-archive.com/article/2','readMoreUrl':'https://www.alexandria-archive.com/article/2','access':{'full':False,'requiresSignIn':True},'provenance':{'rights':'حقوق محفوظة'},'content':[{'type':'text','text':'هذه نبذة عامة للمراجعة'}]}
+ARTICLE={'id':2,'titleAr':'تاريخ الإسكندرية','author':'المؤلف','published':'2025-01-01','url':'https://www.alexandria-archive.com/article/2','readMoreUrl':'https://www.alexandria-archive.com/article/2','access':{'full':False,'requiresSignIn':True},'provenance':{'rights':'حقوق محفوظة'},'_mcp_content':[{'type':'text','text':'هذه نبذة عامة للمراجعة'}]}
 class AlexandriaTests(unittest.TestCase):
     def test_search_and_host_boundary(self):
         with mock.patch.object(aa.Session,'call',return_value=SEARCH) as call: result=aa.search(' الإسكندرية ')
@@ -25,5 +25,5 @@ class AlexandriaTests(unittest.TestCase):
     def test_structured_mcp_result(self):
         session=aa.Session()
         with mock.patch.object(session,'request',side_effect=[{'protocolVersion':'2025-03-26'},{},{'structuredContent':SEARCH,'content':[]}]) as request:
-            self.assertEqual(session.call('search_archive',{'query':'x'}),SEARCH)
+            self.assertEqual(session.call('search_archive',{'query':'x'}),{**SEARCH,'_mcp_content':[]})
             self.assertEqual(request.call_count,3)

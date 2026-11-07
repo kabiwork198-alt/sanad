@@ -36,7 +36,7 @@ def alexandria_live():
         if not page['text'] or 'نبذة عامة' not in page['warning']: raise ValueError('No public preview')
         return f"results={len(results)}; public preview read; article={article['url'].rsplit('/',1)[-1]}"
     except Exception as exc:
-        return f'unavailable ({type(exc).__name__}: {str(exc)[:160]})'
+        raise ValueError(f'{type(exc).__name__}: {str(exc)[:160]}') from exc
 
 
 def check(name, fn):
@@ -44,7 +44,7 @@ def check(name, fn):
         value = fn()
         return f'{name}: OK; ' + (f'results={len(value)}' if isinstance(value, list) else value)
     except Exception as exc:
-        return f'{name}: unavailable ({type(exc).__name__})'
+        return f'{name}: unavailable ({type(exc).__name__}: {str(exc)[:160]})' if name.startswith('Alexandria') else f'{name}: unavailable ({type(exc).__name__})'
 
 checks = [
     ('Internet Archive sample OCR', lambda: f"characters={len(internet_archive.read_text('frenchenglishmed00gorduoft')['text'])}"),
