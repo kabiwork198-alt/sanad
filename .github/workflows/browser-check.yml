@@ -39,7 +39,16 @@ jobs:
       - name: Install browser test driver
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
       - name: Test complete backup interoperability
-        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_backup.py
+        run: |
+          set +e
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_backup.py > "$RUNNER_TEMP/backup-test.log" 2>&1
+          status=$?
+          cat "$RUNNER_TEMP/backup-test.log"
+          if [ "$status" -ne 0 ]; then
+            detail=$(tail -15 "$RUNNER_TEMP/backup-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+            echo "::error title=Backup interoperability test failed::$detail"
+          fi
+          exit "$status"
       - name: Test Qatar record search interface
         run: |
           NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_qdl.cjs

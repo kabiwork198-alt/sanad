@@ -20,8 +20,11 @@ const site='https://kabiwork198-alt.github.io/sanad/';
  await p.click('#save');await p.waitForFunction(()=>!dirty);
  await p._client().send('Page.setDownloadBehavior',{behavior:'allow',downloadPath:tmp});await p.click('#export-all');
  await p.waitForFunction(()=>document.querySelector('#toast').textContent.includes('أُنشئت نسخة'),{timeout:15000});
- const file=path.join(tmp,'sanad-backup-with-files.json');if(!fs.existsSync(file))throw Error('no downloaded backup');
- const backup=JSON.parse(fs.readFileSync(file,'utf8'));if(backup.version!==2||backup.files.length!==1||backup.projects.length!==1)throw Error('missing exported projects or file');
+ const file=path.join(tmp,'sanad-backup-with-files.json');let backup;
+ // The UI can report success before Chromium finishes writing the download.
+ for(let i=0;i<100;i++){try{backup=JSON.parse(fs.readFileSync(file,'utf8'));break}catch{await new Promise(resolve=>setTimeout(resolve,100))}}
+ if(!backup)throw Error('download did not finish within 10 seconds');
+ if(backup.version!==2||backup.files.length!==1||backup.projects.length!==1)throw Error('missing exported projects or file');
  const tampered=JSON.parse(JSON.stringify(backup));tampered.files[0].content=Buffer.from('تعديل الخبيث').toString('base64');tampered.files[0].size=Buffer.byteLength('تعديل الخبيث');
  fs.writeFileSync(path.join(tmp,'tampered.json'),JSON.stringify(tampered));
  // Test the actual file picker and error reporting: no new project on integrity failure.
