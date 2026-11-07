@@ -1,5 +1,6 @@
 """Local-first Sanad Studio; Python standard library only."""
 import json
+import concurrent.futures
 import os
 import re
 import secrets
@@ -13,9 +14,10 @@ import urllib.request
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from datetime import datetime, timezone
 from pathlib import Path
 
-from sanad import workflow
+from sanad import library, workflow
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -39,7 +41,7 @@ DB = DATA / 'sanad.sqlite3'
 HOST, PORT = '127.0.0.1', 8765
 TOKEN = secrets.token_urlsafe(32)
 MAX_BODY = 5 * 1024 * 1024
-COLLECTIONS = ('signals', 'sources', 'claims', 'scenes')
+COLLECTIONS = ('signals', 'sources', 'claims', 'scenes', 'events')
 
 
 def connect():
@@ -73,6 +75,14 @@ def validate_project(project):
     source_ids = [x.get('id') for x in project.get('sources', [])]
     if any(not isinstance(i, str) or not re.fullmatch(r'[a-f0-9]{32}', i) for i in source_ids) or len(set(source_ids)) != len(source_ids):
         raise ValueError('معرّفات المصادر غير صالحة أو مكررة')
+    for group, year_field in (('events', 'sortYear'), ('sources', 'workYear')):
+        for item in project.get(group, []):
+            year = item.get(year_field, '').strip()
+            if year and (not re.fullmatch(r'[0-9]{1,4}', year) or not 1 <= int(year) <= 9999):
+                raise ValueError('سنة الترتيب يجب أن تكون سنة ميلادية من 1 إلى 9999 أو تترك فارغة')
+    for event in project.get('events', []):
+        if event.get('sourceId') and event['sourceId'] not in source_ids:
+            raise ValueError('الحدث يشير إلى مصدر غير موجود')
     statuses = {'لم يُفحص', 'مدعوم', 'محل خلاف', 'غير مدعوم', 'يتعذر التحقق'}
     for claim in project.get('claims', []):
         if claim.get('status', 'لم يُفحص') not in statuses:
@@ -151,6 +161,52 @@ def search_youtube(query, key):
     return output
 
 
+def search_commons(query):
+    params = {'action': 'query', 'generator': 'search', 'gsrsearch': query, 'gsrnamespace': 6,
+              'gsrlimit': 8, 'prop': 'imageinfo', 'iiprop': 'url|extmetadata', 'format': 'json', 'formatversion': 2}
+    url = 'https://commons.wikimedia.org/w/api.php?' + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'SanadStudio/0.1 (local research tool)'})
+    with urllib.request.urlopen(req, timeout=15) as response:
+        payload = json.loads(response.read(2_000_000))
+    result = []
+    for page in payload.get('query', {}).get('pages', []):
+        info = (page.get('imageinfo') or [{}])[0]
+        meta = info.get('extmetadata') or {}
+        license_name = (meta.get('LicenseShortName') or {}).get('value', '')
+        # The page URL is for human review; the program does not auto-download the image.
+        description = info.get('descriptionurl', '')
+        if not isinstance(description, str) or not description.startswith('https://commons.wikimedia.org/'):
+            continue
+        result.append({'title': str(page.get('title', '')), 'url': description,
+                       'author': '', 'detail': 'ترخيص مذكور في السجل: ' + str(license_name or 'غير معروف') + '؛ يلزم فحص صفحة الملف والحقوق.',
+                       'access': 'سجل مادة مرئية — تحقق من الأصل والنسبة والترخيص'})
+    return result
+
+
+def research_search(query):
+    if not isinstance(query, str) or not query.strip() or len(query) > 300:
+        raise ValueError('أدخل عبارة بحث من حرف إلى 300 حرف')
+    query = query.strip()
+    def crossref():
+        return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'DOI: ' + x['doi'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_crossref(query)]
+    def openlibrary():
+        return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'سنة طبعة مفهرسة: ' + x['year'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_openlibrary(query)]
+    providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query))]
+    results, states = [], []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [(name, pool.submit(fn)) for name, fn in providers]
+        for name, future in futures:
+            try:
+                items = future.result()
+                results.extend(dict(x, provider=name) for x in items)
+                states.append({'provider': name, 'status': 'اكتمل', 'count': len(items)})
+            except Exception:
+                # A failed source is not the same as an empty search result.
+                states.append({'provider': name, 'status': 'تعذر الاتصال أو قراءة الاستجابة', 'count': 0})
+    return {'query': query, 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds'), 'providers': states, 'results': results,
+            'warning': 'النتائج سجلات بحث وليست إثباتًا لقراءة النص أو صحة النسبة أو رخصة الاستخدام. لا يشمل البحث كل المكتبات.'}
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -209,12 +265,20 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(403, {'error': 'طلب غير مسموح'})
         try:
             length = int(self.headers.get('Content-Length', '0'))
-            if length <= 0 or length > MAX_BODY:
+            request_path = urllib.parse.urlsplit(self.path).path
+            body_limit = (library.MAX_FILE * 4 // 3 + 8192) if request_path == '/api/library/import' else MAX_BODY
+            if length <= 0 or length > body_limit:
                 raise ValueError('حجم الطلب غير صالح')
             body = json.loads(self.rfile.read(length))
             if not isinstance(body, dict):
                 raise ValueError('صيغة الطلب غير صحيحة')
             path = urllib.parse.urlsplit(self.path).path
+            if path == '/api/research':
+                return self.send(200, research_search(body.get('query', '')))
+            if path == '/api/library/import':
+                return self.send(200, {'document': library.import_document(DATA, body.get('name', ''), body.get('content', ''))})
+            if path == '/api/library/search':
+                return self.send(200, library.search_document(DATA, body.get('id', ''), body.get('query', '')))
             if path == '/api/save':
                 save_project(body.get('project'))
                 return self.send(200, {'ok': True})
