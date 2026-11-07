@@ -1,12 +1,13 @@
 // Optional live diagnostics. Uses public example queries and does not submit user data.
 const origin='https://kabiwork198-alt.github.io';
+function report(message){ console.log(`::notice file=tests/check_live_services.cjs,line=1::${message}`); }
 async function check(name,url){
   try {
     const r=await fetch(url,{headers:{Origin:origin,'User-Agent':'SanadStudio/0.1 (public connectivity check)'},signal:AbortSignal.timeout(18000)});
     const allow=r.headers.get('access-control-allow-origin')||'none';
-    if(!r.ok) {console.log(`${name}: HTTP ${r.status}, CORS=${allow}`);return null;}
-    const data=await r.json();console.log(`${name}: HTTP ${r.status}, CORS=${allow}`);return data;
-  }catch(e){console.log(`${name}: unavailable (${e.name})`);return null}
+    if(!r.ok) {report(`${name}: HTTP ${r.status}, CORS=${allow}`);return null;}
+    const data=await r.json();report(`${name}: HTTP ${r.status}, CORS=${allow}`);return data;
+  }catch(e){report(`${name}: unavailable (${e.name})`);return null}
 }
 (async()=>{
  const enc=encodeURIComponent;
@@ -19,7 +20,7 @@ async function check(name,url){
    check('Open Library','https://openlibrary.org/search.json?limit=1&q='+q),
    check('Wikimedia Commons','https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=1&prop=imageinfo&iiprop=url%7Cextmetadata&format=json&formatversion=2&origin=*&gsrsearch='+q),
  ]);
- console.log('Wikipedia topic count:',topics?.query?.categorymembers?.length ?? 'unknown');
+ report('Wikipedia topic count: '+(topics?.query?.categorymembers?.length ?? 'unknown'));
  const id=search?.query?.search?.[0]?.pageid;
- if(id){const page=await check('Wikipedia citations',base+'&action=parse&prop=text&pageid='+id);console.log('Wikipedia citation markers:',(page?.parse?.text?.match(/<li\b[^>]*\bid\s*=\s*["']cite_note-/gi)||[]).length)}
+ if(id){const page=await check('Wikipedia citations',base+'&action=parse&prop=text&pageid='+id);report('Wikipedia citation markers: '+(page?.parse?.text?.match(/<li\b[^>]*\bid\s*=\s*["']cite_note-/gi)||[]).length)}
 })().catch(e=>{console.error(e);process.exitCode=1});
