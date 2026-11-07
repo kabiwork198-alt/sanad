@@ -15,7 +15,7 @@ const root=path.resolve(__dirname,'..'),url=process.env.SANAD_TEST_ORIGIN||'http
  await page.waitForFunction(()=>qdlResult!==null,{timeout:15000});
  const result=await page.evaluate(()=>qdlResult);if(result.hits.length!==1||result.total!==2||!result.hits[0].url.endsWith('vdc_100064303797.0x000004'))throw Error('wrong QDL result');
  if(!(await page.$eval('#content',e=>e.innerText)).includes('لا يثبت الغياب'))throw Error('missing warning');
- await page.click('#save');await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="sources"]');if(!await page.$('[data-qdl-search="0"]'))throw Error('saved source unavailable');
+ await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="sources"]');if(!await page.$('[data-qdl-search="0"]'))throw Error('saved source unavailable');
  for(const width of [320,390,1440]){await page.setViewport({width,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)>1)throw Error('overflow '+width)}
  if(errors.length)throw Error(errors.join('; '));console.log('PASS: QDL record search UI, page link, warning, persistence and responsive widths');
  }finally{if(browser)await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});

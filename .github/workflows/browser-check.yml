@@ -58,7 +58,16 @@ jobs:
       - name: Diagnose Alexandria MCP real browser initialization
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_alexandria_browser.cjs
       - name: Test Alexandria MCP local UI
-        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_alexandria.py
+        run: |
+          set +e
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_alexandria.py > "$RUNNER_TEMP/alex-test.log" 2>&1
+          status=$?
+          cat "$RUNNER_TEMP/alex-test.log"
+          if [ "$status" -ne 0 ]; then
+            detail=$(tail -15 "$RUNNER_TEMP/alex-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+            echo "::error title=Alexandria UI test failed::$detail"
+          fi
+          exit "$status"
       - name: Diagnose Turath MCP real browser initialization
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_turath_browser.cjs
       - name: Probe Internet Archive text access in a browser

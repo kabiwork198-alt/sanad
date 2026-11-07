@@ -26,7 +26,7 @@ const root=path.resolve(__dirname,'..'),text='نص تجريبي\nعبارة مو
  if(reads!==(local?1:2))throw Error('Unexpected network count '+reads);
  let source=await page.evaluate(()=>current.sources[0]);if(!source.notes.includes('sample_djvu.txt')||!source.notes.includes('SHA-1')||!source.fileId)throw Error('Provenance missing');
  await page.type('[data-local-query="0"]','عبارة موثقة');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
- await page.click('#save');await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="sources"]');
+ await page.click('#save');await page.waitForFunction(()=>!dirty);await page.reload({waitUntil:'load'});await page.click('[data-project]');await page.click('[data-tab="sources"]');
  await page.type('[data-local-query="0"]','عبارة موثقة');await page.click('[data-local-search="0"]');await page.waitForSelector('[data-match="0"]');
  if(errors.length)throw Error(errors.join('; '));console.log('PASS: Archive consent, OCR import, provenance, local search and persistence '+(local?'(loopback)':'(browser)'));
  }finally{if(browser)await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});
