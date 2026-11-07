@@ -60,6 +60,21 @@ function report(message){console.log(`::notice file=tests/live_browser.cjs,line=
     report('Wikisource live UI: selected public revision saved, searched locally, match and revision link present');
   } catch(e) {const state=await page.evaluate(()=>({tab,toast:document.querySelector('#toast')?.textContent,sourceCount:current?.sources.length,wikiButtons:document.querySelectorAll('[data-wiki-read]').length}));report('Wikisource live UI unavailable: '+e.message.slice(0,100)+' '+JSON.stringify(state));}
 
+
+  // Public pinned OpenITI index is fetched by the real browser only with consent.
+  try {
+    await page.click('[data-tab="research"]');
+    await page.$eval('#openiti-query',e=>e.value='تاريخ الطبري');await page.click('#openiti-search');
+    await page.waitForFunction(()=>typeof openitiResult!=='undefined'&&openitiResult!==null,{timeout:75000});
+    const oi=await page.evaluate(()=>openitiResult);
+    if(oi.error)throw Error(oi.error);
+    if(oi.total<1||!oi.results[0]?.url?.startsWith('https://github.com/OpenITI/RELEASE/blob/'))throw Error('Expected catalog result or pinned link missing');
+    await page.click('[data-openiti-result="0"]');
+    const source=await page.evaluate(()=>current.sources[current.sources.length-1]);
+    if(!source.notes.includes('CC BY-NC-SA'))throw Error('License warning not retained');
+    report('OpenITI live browser: catalog loaded with consent, history search matches='+oi.total+', record and license saved (not full-text search)');
+  } catch(e) { report('OpenITI live browser unavailable: '+String(e.message).slice(0,160)); }
+
   if(errors.length)throw Error('Browser script errors: '+errors.join('; '));
  }finally{if(browser)await browser.close();server.close()}
 })().catch(err=>{console.error(err);process.exitCode=1});

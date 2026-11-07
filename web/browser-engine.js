@@ -102,8 +102,8 @@ window.SANAD_BROWSER = true;
   }
   async function getJSON(url) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
-    try { const response = await fetch(url,{signal:controller.signal});if(!response.ok)throw Error('تعذر الاتصال بالخدمة');return await response.json(); }
-    catch { throw Error('تعذر الاتصال بالخدمة من هذا المتصفح؛ قد تكون الخدمة محجوبة أو لا تسمح بالوصول المباشر.'); }
+    try { const response = await fetch(url,{signal:controller.signal});if(!response.ok)throw Error('HTTP '+response.status);return await response.json(); }
+    catch(e) { if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال');if(/^HTTP [0-9]{3}$/.test(e?.message||''))throw e;throw Error('تعذر الاتصال أو قراءة الاستجابة؛ قد يكون الاتصال أو وصول المتصفح محجوبًا.'); }
     finally {clearTimeout(timer);}
   }
   async function crossref(q) {
@@ -191,11 +191,52 @@ window.SANAD_BROWSER = true;
     } catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال بويكي مصدر');throw e}
     finally {clearTimeout(timer)}
   }
-  async function research(q) {
+  // The upstream metadata snapshot is downloaded only after explicit user action.
+  const openitiRevision='cfc4157a3cf2054c0888f133970a4eaa3e22e58c';
+  const openitiURL='https://raw.githubusercontent.com/OpenITI/RELEASE/'+openitiRevision+'/metadata/OpenITI_metadata_2025-1-9.tsv';
+  let openitiIndexPromise=null;
+  function openitiIndex(){
+    if(openitiIndexPromise)return openitiIndexPromise;
+    openitiIndexPromise=(async()=>{
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000),limit=13500000;let bytes=0,chunks=[];
+      try{
+        const r=await fetch(openitiURL,{signal:controller.signal,credentials:'omit'});
+        if(!r.ok)throw Error('تعذر تنزيل فهرس OpenITI (HTTP '+r.status+')');
+        if(Number(r.headers.get('Content-Length')||0)>limit)throw Error('فهرس OpenITI أكبر من الحد الآمن');
+        if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.length;if(bytes>limit){await reader.cancel();throw Error('فهرس OpenITI أكبر من الحد الآمن')}chunks.push(part.value)}}finally{reader.releaseLock()}}
+        else{const part=new Uint8Array(await r.arrayBuffer());bytes=part.length;if(bytes>limit)throw Error('فهرس OpenITI أكبر من الحد الآمن');chunks=[part]}
+        const all=new Uint8Array(bytes);let offset=0;for(const part of chunks){all.set(part,offset);offset+=part.length}
+        const text=new TextDecoder('utf-8',{fatal:true}).decode(all),header=(text.split('\n',1)[0]||'').replace(/^\uFEFF/,'').split('\t');
+        if(!['version_uri','author_ar','author_lat','title_ar','title_lat','date','status','ed_info','local_path'].every(k=>header.includes(k)))throw Error('صيغة فهرس OpenITI غير مدعومة');
+        return text;
+      }catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة تنزيل فهرس OpenITI');if(e instanceof TypeError)throw Error('تعذر الاتصال بـ GitHub لتنزيل فهرس OpenITI');throw e}
+      finally{clearTimeout(timer)}
+    })().catch(e=>{openitiIndexPromise=null;throw e});
+    return openitiIndexPromise;
+  }
+  async function searchOpeniti(q){
+    q=queryText(q);const needle=normalize(q),terms=needle.split(/\s+/).filter(Boolean);if(!terms.length)throw Error('عبارة البحث غير صالحة');
+    const lines=(await openitiIndex()).split(/\r?\n/),headers=(lines.shift()||'').replace(/^\uFEFF/,'').split('\t');
+    const keys=['version_uri','author_ar','author_lat','title_ar','title_lat','date','status','ed_info','local_path'],idx=Object.fromEntries(keys.map(k=>[k,headers.indexOf(k)]));
+    if(keys.some(k=>idx[k]<0))throw Error('صيغة فهرس OpenITI غير مدعومة');
+    let total=0;const best=[];
+    for(const line of lines){const v=line.split('\t');if(v.length<headers.length)continue;const d=Object.fromEntries(keys.map(k=>[k,v[idx[k]]]));const parts=d.local_path.split('/');
+      if(parts.length!==4||parts[0]!=='data'||parts.slice(1).some(x=>!(/^[A-Za-z0-9_.-]+$/.test(x))||x==='.'||x==='..'))continue;
+      const combined=normalize([d.title_ar,d.title_lat,d.author_ar,d.author_lat,d.version_uri].join(' '));if(!terms.every(t=>combined.includes(t)))continue;
+      total++;const rank=(normalize(d.title_ar+' '+d.title_lat).includes(needle)?0:2)+(d.status.toLowerCase()==='pri'?0:1);
+      if(best.length>=25&&rank>=best[best.length-1].rank)continue;
+      best.push({rank,item:{title:(d.title_ar||d.title_lat||d.version_uri).slice(0,300),author:(d.author_ar||d.author_lat).slice(0,300),url:'https://github.com/OpenITI/RELEASE/blob/'+openitiRevision+'/'+d.local_path,detail:'معرّف النسخة: '+d.version_uri.slice(0,200)+'؛ رمز السنة في الفهرس: '+(d.date||'غير معروف').slice(0,40)+' (ليس تاريخ الحدث)؛ حالة النسخة: '+(d.status||'غير معروف').slice(0,40)+'؛ بيانات الطبعة: '+(d.ed_info||'غير معروفة').slice(0,400),access:'سجل OpenITI؛ قد يتعذر فتح النص. لم يُقرأ آليًا. راجع الطبعة والرخصة، وبخاصة قيود الاستخدام التجاري.'}});
+      best.sort((a,b)=>a.rank-b.rank);if(best.length>25)best.pop();
+    }
+    return {query:q,total,results:best.map(x=>x.item),warning:'بحث في فهرس OpenITI 2025.1.9 فقط؛ لم يُقرأ النص. رخصة المجموعة CC BY-NC-SA 4.0 تقيد الاستخدام التجاري؛ راجع الحقوق والطبعة والإتاحة قبل النشر.'};
+  }
+  async function research(q, selected) {
     q=queryText(q);
     const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['Internet Archive',()=>internetArchive(q)],['DOAJ',()=>doaj(q)],['OpenAlex',()=>openalex(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')]];
-    const outcomes=await Promise.all(providers.map(async ([provider,fn])=>{try{const items=await fn();return {provider,items,status:'اكتمل'};}catch{return {provider,items:[],status:'تعذر الاتصال أو قراءة الاستجابة'};}}));
-    return {query:q,searched_at:new Date().toISOString(),providers:outcomes.map(x=>({provider:x.provider,status:x.status,count:x.items.length})),results:outcomes.flatMap(x=>x.items.map(item=>({...item,provider:x.provider}))),warning};
+    if(selected!==undefined&&(typeof selected!=='string'||!providers.some(p=>p[0]===selected)))throw Error('المصدر غير مدعوم');
+    const requested=selected===undefined?providers:providers.filter(p=>p[0]===selected);
+    const outcomes=await Promise.all(requested.map(async ([provider,fn])=>{try{const items=await fn();return {provider,items,status:'اكتمل',reason:''};}catch(e){const message=String(e?.message||'');return {provider,items:[],status:'تعذر الاتصال أو قراءة الاستجابة',reason:(/^HTTP [0-9]{3}$/.test(message)||message==='انتهت مهلة الاتصال')?message:'تحقق من الاتصال أو قيود المتصفح'};}}));
+    return {query:q,searched_at:new Date().toISOString(),providers:outcomes.map(x=>({provider:x.provider,status:x.status,count:x.items.length,reason:x.reason})),results:outcomes.flatMap(x=>x.items.map(item=>({...item,provider:x.provider}))),warning};
   }
   async function youtube(q,key) {
     q=queryText(q);if(typeof key!=='string'||!key.trim()||key.length>500)throw Error('أدخل مفتاح YouTube Data API');
@@ -247,7 +288,8 @@ window.SANAD_BROWSER = true;
     if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
     if(path==='/api/topics')return topics();
     if(path==='/api/wikisource/read')return readWikisource(data.page_id);
-    if(path==='/api/research')return research(data.query);
+    if(path==='/api/openiti/search')return searchOpeniti(data.query);
+    if(path==='/api/research')return research(data.query,data.provider);
     if(path==='/api/crossref')return {results:await crossref(data.query)};
     if(path==='/api/openlibrary')return {results:await openlibrary(data.query)};
     if(path==='/api/youtube')return {results:await youtube(data.query,data.key)};

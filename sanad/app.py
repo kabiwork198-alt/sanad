@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
 
-from sanad import library, workflow, wikipedia, catalogs
+from sanad import library, workflow, wikipedia, catalogs, openiti
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -194,7 +194,7 @@ def search_commons(query):
     return result
 
 
-def research_search(query):
+def research_search(query, provider=None):
     if not isinstance(query, str) or not query.strip() or len(query) > 300:
         raise ValueError('أدخل عبارة بحث من حرف إلى 300 حرف')
     query = query.strip()
@@ -203,17 +203,22 @@ def research_search(query):
     def openlibrary():
         return [{'title': x['title'], 'url': x['url'], 'author': x['author'], 'detail': 'سنة طبعة مفهرسة: ' + x['year'], 'access': 'بيانات فهرسية — تحقق من النص الكامل'} for x in search_openlibrary(query)]
     providers = [('Crossref', crossref), ('Open Library', openlibrary), ('Wikimedia Commons', lambda: search_commons(query)), ('إحالات ويكيبيديا العربية', lambda: wikipedia.citations(query)), ('ويكي مصدر العربية', lambda: catalogs.wikisource(query)), ('Internet Archive', lambda: catalogs.internet_archive(query)), ('DOAJ', lambda: catalogs.doaj(query)), ('OpenAlex', lambda: catalogs.openalex(query)), ('المكتبة الرقمية العالمية', lambda: catalogs.loc(query, 'world-digital-library')), ('صحف Chronicling America', lambda: catalogs.loc(query, 'chronicling-america')), ('الأرشيف الوطني البريطاني (Windows)', lambda: catalogs.national_archives(query))]
+    if provider is not None:
+        if not isinstance(provider, str) or provider not in [name for name, _ in providers]:
+            raise ValueError('المصدر غير مدعوم')
+        providers = [(name, fn) for name, fn in providers if name == provider]
     results, states = [], []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=11) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(providers)) as pool:
         futures = [(name, pool.submit(fn)) for name, fn in providers]
         for name, future in futures:
             try:
                 items = future.result()
                 results.extend(dict(x, provider=name) for x in items)
-                states.append({'provider': name, 'status': 'اكتمل', 'count': len(items)})
-            except Exception:
+                states.append({'provider': name, 'status': 'اكتمل', 'count': len(items), 'reason': ''})
+            except Exception as exc:
                 # A failed source is not the same as an empty search result.
-                states.append({'provider': name, 'status': 'تعذر الاتصال أو قراءة الاستجابة', 'count': 0})
+                reason = f'HTTP {exc.code}' if isinstance(exc, urllib.error.HTTPError) else ('انتهت مهلة الاتصال' if isinstance(exc, TimeoutError) else 'تحقق من الاتصال أو إتاحة الخدمة')
+                states.append({'provider': name, 'status': 'تعذر الاتصال أو قراءة الاستجابة', 'count': 0, 'reason': reason})
     return {'query': query, 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds'), 'providers': states, 'results': results,
             'warning': 'النتائج سجلات بحث وليست إثباتًا لقراءة النص أو صحة النسبة أو رخصة الاستخدام. لا يشمل البحث كل المكتبات.'}
 
@@ -288,8 +293,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {'topics': wikipedia.topics(), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
             if path == '/api/wikisource/read':
                 return self.send(200, catalogs.read_wikisource(body.get('page_id', '')))
+            if path == '/api/openiti/search':
+                return self.send(200, openiti.search(body.get('query', '')))
             if path == '/api/research':
-                return self.send(200, research_search(body.get('query', '')))
+                return self.send(200, research_search(body.get('query', ''), body.get('provider')))
             if path == '/api/library/import':
                 return self.send(200, {'document': library.import_document(DATA, body.get('name', ''), body.get('content', ''))})
             if path == '/api/library/search':

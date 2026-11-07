@@ -3,7 +3,7 @@ import concurrent.futures
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sanad import catalogs
+from sanad import catalogs, openiti
 
 def wiki():
     page = catalogs.read_wikisource('43576')
@@ -20,6 +20,7 @@ def check(name, fn):
 
 checks = [
     ('Wikisource selected revision', wiki),
+    ('OpenITI index history search', lambda: f"matches={openiti.search('تاريخ الطبري')['total']}"),
     ('DOAJ Baghdad', lambda: catalogs.doaj('Baghdad')),
     ('OpenAlex Baghdad no key', lambda: catalogs.openalex('Baghdad')),
     ('WDL Baghdad', lambda: catalogs.loc('Baghdad', 'world-digital-library')),

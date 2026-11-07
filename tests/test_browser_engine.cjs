@@ -13,6 +13,10 @@ const context = {
   crypto: require('node:crypto').webcrypto,
   DOMParser: class { parseFromString(text) { return {body:{textContent:text}}; } },
   fetch: async url => {
+    if (url.startsWith('https://raw.githubusercontent.com/OpenITI/RELEASE/')) {
+      const text='version_uri\tauthor_ar\tauthor_lat\ttitle_ar\ttitle_lat\tdate\tstatus\ted_info\tlocal_path\n0310Tabari.Tarikh.X-ara1\tالطبري\tTabari\tتاريخ الطبري\tTarikh\t0310\tpri\tطبعة\tdata/0310Tabari/0310Tabari.Tarikh/0310Tabari.Tarikh.X-ara1\n0310Tabari.Bad\tالطبري\tTabari\tbad\tBad\t0310\tpri\t\tdata/../evil/file\n';
+      return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>Uint8Array.from(Buffer.from(text)).buffer};
+    }
     if (url.startsWith('https://api.crossref.org/')) return {ok:true,json:async()=>({message:{items:[{title:['Paper'],DOI:'10.1/test',URL:'https://doi.org/10.1/test'}]}})};
     if (url.startsWith('https://openlibrary.org/')) return {ok:true,json:async()=>({docs:[{key:'/works/OL123W',title:'Book',author_name:['Author'],first_publish_year:2000}]})};
     if (url.startsWith('https://commons.wikimedia.org/')) throw Error('blocked');
@@ -74,6 +78,14 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   assert.match(found('DOAJ').url,/doaj.org\/article/);
   assert.match(found('OpenAlex').detail,/closed/);
   assert.equal(result.providers.find(x=>x.provider==='Wikimedia Commons').status,'تعذر الاتصال أو قراءة الاستجابة');
+  const single=await api('/api/research',{query:'History',provider:'Open Library'});
+  assert.equal(single.providers.length,1);assert.equal(single.results[0].provider,'Open Library');
+  await assert.rejects(()=>api('/api/research',{query:'History',provider:'bad'}));
+  const oi=await api('/api/openiti/search',{query:'تاريخ الطبري'});
+  assert.equal(oi.total,1);assert.equal(oi.results.length,1);
+  assert.match(oi.results[0].url,/github.com\/OpenITI\/RELEASE\/blob/);
+  assert.match(oi.warning,/تقي.*الاستخدام التجاري/);
+  await assert.rejects(()=>api('/api/openiti/search',{query:''}));
   const revision=await api('/api/wikisource/read',{page_id:'43576'});
   assert.equal(revision.text,'نص أصلي للمراجعة');
   assert.equal(revision.revision_url,'https://ar.wikisource.org/w/index.php?oldid=42');
