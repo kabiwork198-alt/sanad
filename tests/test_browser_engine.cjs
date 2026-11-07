@@ -11,10 +11,17 @@ const context = {
   },
   TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
   crypto: require('node:crypto').webcrypto,
+  DOMParser: class { parseFromString(text) { return {body:{textContent:text}}; } },
   fetch: async url => {
     if (url.startsWith('https://api.crossref.org/')) return {ok:true,json:async()=>({message:{items:[{title:['Paper'],DOI:'10.1/test',URL:'https://doi.org/10.1/test'}]}})};
     if (url.startsWith('https://openlibrary.org/')) return {ok:true,json:async()=>({docs:[{key:'/works/OL123W',title:'Book',author_name:['Author'],first_publish_year:2000}]})};
     if (url.startsWith('https://commons.wikimedia.org/')) throw Error('blocked');
+    if (url.startsWith('https://ar.wikipedia.org/')) {
+      const q=new URL(url).searchParams;
+      if(q.get('list')==='categorymembers')return {ok:true,json:async()=>({query:{categorymembers:[{pageid:1319,title:'الخوارزمي'}]}})};
+      if(q.get('list')==='search')return {ok:true,json:async()=>({query:{search:[{pageid:1319,title:'الخوارزمي'}]}})};
+      if(q.get('action')==='parse')return {ok:true,json:async()=>({parse:{text:'<ol><li id="cite_note-1"><span>عنوان المرجع <b>صفحة ١٠</b></span></li></ol>'}})};
+    }
     throw Error('unexpected network request');
   },
 };
@@ -32,8 +39,12 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   await assert.rejects(()=>api('/api/draft',{project}));
   project.claims.push({text:'Claim for review',status:'مدعوم',sourceId:'b'.repeat(32),location:'p. 10'});
   assert.match((await api('/api/draft',{project})).text,/Claim for review/);
+  const topics=await api('/api/topics',{});
+  assert.equal(topics.topics[0].title,'الخوارزمي');
   const result=await api('/api/research',{query:'History'});
-  assert.equal(result.results.length,2);
+  assert.equal(result.results.length,3);
+  assert.match(result.results[2].url, /cite_note-1/);
+  assert.match(result.results[2].access, /لم يُقرأ/);
   assert.equal(result.providers[2].status,'تعذر الاتصال أو قراءة الاستجابة');
   await assert.rejects(()=>api('/api/lm',{prompt:'test'}));
   await api('/api/delete',{id:project.id});

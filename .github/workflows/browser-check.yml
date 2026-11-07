@@ -17,3 +17,13 @@ jobs:
       - run: node --check web/app.js
       - run: node --check web/browser-engine.js
       - run: node tests/test_browser_engine.cjs
+  live-service-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check public catalogs and browser CORS (diagnostic, services may be unavailable)
+        run: node tests/check_live_services.cjs

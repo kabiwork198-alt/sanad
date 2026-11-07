@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from sanad import app, library
+from sanad import app, library, wikipedia
 
 
 def simple_pdf():
@@ -71,7 +71,8 @@ class FederatedSearchTest(unittest.TestCase):
         item = {'title': 'Book', 'url': 'https://example.com', 'author': '', 'year': '2000'}
         with mock.patch('sanad.app.search_crossref', side_effect=OSError('network')), \
              mock.patch('sanad.app.search_openlibrary', return_value=[item]), \
-             mock.patch('sanad.app.search_commons', return_value=[]):
+             mock.patch('sanad.app.search_commons', return_value=[]), \
+             mock.patch('sanad.app.wikipedia.citations', return_value=[]):
             result = app.research_search('example')
         self.assertEqual(len(result['results']), 1)
         self.assertEqual(result['results'][0]['provider'], 'Open Library')
@@ -86,6 +87,24 @@ class FederatedSearchTest(unittest.TestCase):
             found = app.search_commons('history')
         self.assertEqual(len(found), 1)
         self.assertIn('CC BY', found[0]['detail'])
+
+
+class WikipediaTest(unittest.TestCase):
+    def test_topics_only_accepts_article_ids(self):
+        payload = {'query': {'categorymembers': [{'pageid':1319, 'title':'الخوارزمي'}, {'pageid':'bad', 'title':'fake'}]}}
+        with mock.patch('sanad.wikipedia.get_json', return_value=payload):
+            result = wikipedia.topics()
+        self.assertEqual(result, [{'title':'الخوارزمي', 'url':'https://ar.wikipedia.org/?curid=1319'}])
+
+    def test_citations_preserve_the_origin_and_do_not_claim_reading(self):
+        search = {'query': {'search': [{'pageid':1319, 'title':'الخوارزمي'}]}}
+        parsed = {'parse': {'text':'<ol><li id="cite_note-1"><span>اسم المرجع <b>صفحة ١٠</b></span></li><li>irrelevant</li></ol>'}}
+        with mock.patch('sanad.wikipedia.get_json', side_effect=[search, parsed]):
+            result = wikipedia.citations('الخوارزمي')
+        self.assertEqual(len(result), 1)
+        self.assertIn('cite_note-1', result[0]['url'])
+        self.assertIn('صفحة ١٠', result[0]['title'])
+        self.assertIn('لم يُقرأ', result[0]['access'])
 
 
 class ChronologyTest(unittest.TestCase):

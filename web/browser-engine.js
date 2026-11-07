@@ -104,9 +104,33 @@ window.SANAD_BROWSER = true;
     const d = await getJSON('https://commons.wikimedia.org/w/api.php?'+params({action:'query',generator:'search',gsrsearch:queryText(q),gsrnamespace:'6',gsrlimit:'8',prop:'imageinfo',iiprop:'url|extmetadata',format:'json',formatversion:'2',origin:'*'}));
     return (d.query?.pages||[]).flatMap(p=>{const info=p.imageinfo?.[0]||{},url=info.descriptionurl||'';if(!url.startsWith('https://commons.wikimedia.org/'))return [];const lic=info.extmetadata?.LicenseShortName?.value||'غير معروف';return [{title:p.title||'',url,author:'',detail:`ترخيص مذكور في السجل: ${lic}؛ يلزم فحص صفحة الملف والحقوق.`,access:'سجل مادة مرئية — تحقق من الأصل والنسبة والترخيص'}];});
   }
+  const wikiAPI = o => 'https://ar.wikipedia.org/w/api.php?' + params({...o,format:'json',formatversion:'2',origin:'*'});
+  async function topics() {
+    const d=await getJSON(wikiAPI({action:'query',list:'categorymembers',cmtitle:'تصنيف:تاريخ إسلامي',cmtype:'page',cmlimit:'24'}));
+    const topics=(d.query?.categorymembers||[]).filter(x=>Number.isSafeInteger(x.pageid)&&x.pageid>0&&typeof x.title==='string'&&x.title.trim()).map(x=>({title:x.title.slice(0,200),url:'https://ar.wikipedia.org/?curid='+x.pageid}));
+    return {topics,searched_at:new Date().toISOString()};
+  }
+  async function wikiCitations(q) {
+    const search=await getJSON(wikiAPI({action:'query',list:'search',srsearch:q,srlimit:'1',srnamespace:'0'}));
+    const page=search.query?.search?.[0];
+    if(!page)return [];
+    if(!Number.isSafeInteger(page.pageid)||page.pageid<=0)throw Error('سجل ويكيبيديا غير صالح');
+    const d=await getJSON(wikiAPI({action:'parse',pageid:String(page.pageid),prop:'text'}));
+    if(typeof d.parse?.text!=='string')throw Error('استجابة ويكيبيديا غير صالحة');
+    // Parse only isolated citation text, never insert remote HTML into the live page.
+    const out=[];const pattern=/<li\b[^>]*\bid\s*=\s*["'](cite_note-[^"']+)["'][^>]*>([\s\S]*?)<\/li>/gi;
+    for(const match of d.parse.text.matchAll(pattern)){
+      const plain=match[2].replace(/<[^>]*>/g,' ');
+      const text=(new DOMParser().parseFromString(plain,'text/html').body.textContent||'').replace(/\s+/g,' ').trim().slice(0,600);
+      if(!text)continue;
+      out.push({title:text.slice(0,200),author:'',url:'https://ar.wikipedia.org/?curid='+page.pageid+'#'+encodeURIComponent(match[1]),detail:`مرجع مذكور في مقالة ويكيبيديا «${String(page.title||'').slice(0,200)}»: ${text} — تحقق من المصدر الأصلي.`,access:'إحالة في ويكيبيديا، لم يُقرأ المصدر الأصلي؛ تحقق من مطابقتها للموضوع والإتاحة والحقوق.'});
+      if(out.length>=15)break;
+    }
+    return out;
+  }
   async function research(q) {
     q=queryText(q);
-    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)]];
+    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)]];
     const outcomes=await Promise.all(providers.map(async ([provider,fn])=>{try{const items=await fn();return {provider,items,status:'اكتمل'};}catch{return {provider,items:[],status:'تعذر الاتصال أو قراءة الاستجابة'};}}));
     return {query:q,searched_at:new Date().toISOString(),providers:outcomes.map(x=>({provider:x.provider,status:x.status,count:x.items.length})),results:outcomes.flatMap(x=>x.items.map(item=>({...item,provider:x.provider}))),warning};
   }
@@ -158,6 +182,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/projects')return {projects:projects()};
     if(path==='/api/save'){validate(data.project);const items=projects().filter(x=>x.id!==data.project.id);items.unshift(data.project);writeProjects(items);return {ok:true};}
     if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
+    if(path==='/api/topics')return topics();
     if(path==='/api/research')return research(data.query);
     if(path==='/api/crossref')return {results:await crossref(data.query)};
     if(path==='/api/openlibrary')return {results:await openlibrary(data.query)};
