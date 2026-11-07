@@ -1,0 +1,19 @@
+name: Check browser edition
+on:
+  push:
+    branches:
+      - 'arena/592bf7be-sanad'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check web/app.js
+      - run: node --check web/browser-engine.js
+      - run: node tests/test_browser_engine.cjs
