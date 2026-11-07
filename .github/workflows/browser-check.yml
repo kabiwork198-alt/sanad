@@ -31,6 +31,8 @@ jobs:
         run: node tests/check_live_services.cjs
       - name: Install browser test driver
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
+      - name: Probe Internet Archive text access in a browser
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_archive.cjs
       - name: Test Wikisource import and search in a mobile browser
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_wikisource.cjs
       - name: Test manual source workflow and responsive navigation
