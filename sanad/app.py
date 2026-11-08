@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
 
-from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl, openiti_corpus, open_access
+from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl, openiti_corpus, open_access, pageviews
 from sanad.http_identity import USER_AGENT
 
 def runtime_paths():
@@ -299,12 +299,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed_host():
             return self.send(403, {'error': 'طلب غير مسموح'})
         path = urllib.parse.urlsplit(self.path).path
-        if path in ('/', '/index.html', '/app.js', '/style.css', '/mineru-import.js', '/research-planner.js', '/ocr-journal.js', '/history-dates.js', '/hadith-lookup.js', '/text-alignment.js', '/open-access.js'):
+        if path in ('/', '/index.html', '/app.js', '/style.css', '/mineru-import.js', '/research-planner.js', '/ocr-journal.js', '/history-dates.js', '/hadith-lookup.js', '/text-alignment.js', '/open-access.js', '/pageviews.js'):
             name = 'index.html' if path in ('/', '/index.html') else path[1:]
             content = (ROOT / 'web' / name).read_bytes()
             if name == 'index.html':
                 content = content.replace(b'__SANAD_TOKEN__', TOKEN.encode('ascii'))
-            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'mineru-import.js': 'text/javascript; charset=utf-8', 'research-planner.js': 'text/javascript; charset=utf-8', 'ocr-journal.js': 'text/javascript; charset=utf-8', 'history-dates.js': 'text/javascript; charset=utf-8', 'hadith-lookup.js': 'text/javascript; charset=utf-8', 'text-alignment.js': 'text/javascript; charset=utf-8', 'open-access.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'mineru-import.js': 'text/javascript; charset=utf-8', 'research-planner.js': 'text/javascript; charset=utf-8', 'ocr-journal.js': 'text/javascript; charset=utf-8', 'history-dates.js': 'text/javascript; charset=utf-8', 'hadith-lookup.js': 'text/javascript; charset=utf-8', 'text-alignment.js': 'text/javascript; charset=utf-8', 'open-access.js': 'text/javascript; charset=utf-8', 'pageviews.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
         vendor = {
             '/vendor/pdf.min.mjs': ('pdf.min.mjs', 'text/javascript; charset=utf-8'),
             '/vendor/pdf.worker.min.mjs': ('pdf.worker.min.mjs', 'text/javascript; charset=utf-8'),
@@ -338,6 +338,10 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError('صيغة الطلب غير صحيحة')
             path = urllib.parse.urlsplit(self.path).path
+            if path == '/api/pageviews':
+                try: return self.send(200, pageviews.fetch(body.get('article'),body.get('start'),body.get('end')))
+                except urllib.error.HTTPError as exc:
+                    return self.send(502, {'error': f'تعذر جلب مشاهدات المقالة (HTTP {exc.code})؛ تحقق من العنوان أو حاول لاحقًا.'})
             if path in ('/api/topic-sections', '/api/topics'):
                 try:
                     if path == '/api/topic-sections': return self.send(200, {**wikipedia.topic_sections(body.get('page_id', '')), 'retrieved_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})

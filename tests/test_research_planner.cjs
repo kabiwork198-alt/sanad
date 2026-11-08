@@ -1,5 +1,5 @@
 'use strict';
-const assert=require('node:assert/strict');const {plan,execute,aggregate,brief}=require('../web/research-planner.js');
+const assert=require('node:assert/strict');const {plan,custom,execute,aggregate,brief}=require('../web/research-planner.js');
 (async()=>{
  const arabic=plan('  ابن خلدون  ',false),english=plan('Battle of Baghdad',true);
  assert.equal(arabic.topic,'ابن خلدون');assert.equal(arabic.queries.length,12);assert.equal(arabic.jobs.length,50);assert.equal(english.jobs.length,51);assert.equal(arabic.language,'ar');assert.equal(english.language,'en');
@@ -12,6 +12,8 @@ const assert=require('node:assert/strict');const {plan,execute,aggregate,brief}=
  for(const p of ['الشاملة الرسمية (Windows)','أرشيف الإسكندرية (Windows)']){assert.ok(localHeritage.jobs.some(j=>j.provider===p));assert.ok(!browserHeritage.jobs.some(j=>j.provider===p))}
  assert.throws(()=>plan('x',false,true));assert.throws(()=>plan('a'.repeat(201),true,true));assert.doesNotThrow(()=>plan('a'.repeat(201),true,false));
  assert.throws(()=>plan('a'.repeat(241),false));assert.throws(()=>plan(' ',false));
+ const c=custom('ابن فضلان','رحلة ابن فضلان طريق الفولغا\nمخطوطة رسالة ابن فضلان',true,false);assert.equal(c.queries.length,3);assert.equal(c.jobs.length,22);assert.equal(c.jobs.filter(x=>x.query_id==='custom0').length,3);assert.ok(c.queries[1].query.includes('الفولغا'));
+ assert.throws(()=>custom('ابن فضلان','https://example.org',true));assert.throws(()=>custom('ابن فضلان','',true));assert.throws(()=>custom('ابن فضلان',Array(9).fill('x').map((x,i)=>x+i).join('\n'),true));assert.throws(()=>custom('ابن فضلان','مكرر\nمكرر',true));
  let active=0,max=0,groupActive=new Set(),calls=[];
  const mock=async j=>{assert.ok(!groupActive.has(j.group),'simultaneous same provider group');groupActive.add(j.group);active++;max=Math.max(max,active);calls.push(j);await new Promise(r=>setTimeout(r,4));active--;groupActive.delete(j.group);
   if(j.id==='base|Crossref')return {searched_at:'T',providers:[{provider:j.provider,status:'تعذر الاتصال أو قراءة الاستجابة',reason:'HTTP 429'}],results:[]};

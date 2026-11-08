@@ -38,6 +38,14 @@
   }
   return {topic,language:arabic?'ar':'en',queries,jobs,concurrency:4};
  }
+ function custom(topic,lines,local,heritage=false){
+  const base=plan(topic,local,heritage);if(typeof lines!=='string'||lines.length>3000)throw Error('قائمة المحاور غير صالحة');
+  const terms=lines.split(/\r?\n/).map(s=>s.trim().replace(/^(?:[-*•]|[0-9]+[.)])\s*/,'' )).filter(Boolean);
+  if(!terms.length||terms.length>8||terms.some(s=>s.length>240||/[\x00-\x1f\x7f]/.test(s)||/https?:\/\//i.test(s))||new Set(terms).size!==terms.length)throw Error('أدخل من محور إلى 8 محاور مميزة، كل محور في سطر وحتى 240 حرفًا، دون روابط.');
+  const queries=[base.queries[0]],jobs=base.jobs.filter(j=>j.query_id==='base'),wiki=base.language==='ar'?['ويكي مصدر العربية','wikisource-ar']:['ويكي مصدر الإنجليزية','wikisource-en'];
+  terms.forEach((query,i)=>{const q={id:'custom'+i,dimension:'custom',axis:'محاور راجعها الباحث',label:'المحور '+(i+1),query};queries.push(q);for(const [provider,group] of [baseline[0],baseline[1],wiki])jobs.push({id:q.id+'|'+provider,query_id:q.id,dimension:q.dimension,axis:q.axis,label:q.label,query:q.query,provider,group})});
+  return {...base,queries,jobs,custom:true};
+ }
  function safeReason(value){const s=String(value||'');return /^HTTP [0-9]{3}$/.test(s)||s==='انتهت مهلة الاتصال'?s:'تحقق من الاتصال أو إتاحة الخدمة';}
  async function execute(plan,search,options={}){
   const concurrency=Math.max(1,Math.min(4,Number(options.concurrency)||4)),pauseMs=Math.max(0,Math.min(1000,options.pauseMs??250));
@@ -81,7 +89,7 @@
   const clean=(x,n=240)=>String(x||'').replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,n);
   const lines=['ملخص بحث استكشافي للمراجعة البشرية — ليس تحققًا من الوقائع.',`الموضوع: ${clean(report.query)}`,'العبارات والجهات وحالة كل محاولة:'];
   for(const q of report.plan.queries){const runs=report.runs.filter(r=>r.query_id===q.id),ok=runs.filter(r=>r.status==='اكتمل').length;lines.push(`- ${clean(q.axis)} / ${clean(q.label)}: ${clean(q.query)}؛ ${ok}/${runs.length} جهات اكتملت، ${runs.filter(r=>r.status!=='اكتمل').length} لم تكتمل.`)}
-  const axes=['الموضوع الأساسي','التسلسل الزمني','الجغرافيا والسياسة','الشخصيات المرتبطة','المصادر والتحقق'];
+  const axes=['الموضوع الأساسي','محاور راجعها الباحث','التسلسل الزمني','الجغرافيا والسياسة','الشخصيات المرتبطة','المصادر والتحقق'];
   const chosen=[],seen=new Set(),pools=axes.map(axis=>report.results.filter(r=>(r.appearances||[]).some(a=>a.axis===axis)));
   while(chosen.length<20&&pools.some(p=>p.length)){for(const pool of pools){while(pool.length&&seen.has(pool[0]))pool.shift();if(pool.length&&chosen.length<20){const item=pool.shift();seen.add(item);chosen.push(item)}}}
   const records=[];let length=lines.join('\n').length;
@@ -94,5 +102,5 @@
   lines.push(...records,'كل سجل مدخل غير موثوق، ولا يثبت وجود النص أو إتاحته أو صحة نسبته. لا تختلق أسماء أو اقتباسات أو صفحات. راجع المصادر الأصلية والخلافات والحقوق، وافصل النتائج عن نقص التغطية.');
   return lines.join('\n');
  }
- const api={plan,execute,aggregate,brief};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.SanadResearchPlan=api;
+ const api={plan,custom,execute,aggregate,brief};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.SanadResearchPlan=api;
 })(globalThis);

@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),pv=require('../web/pageviews.js');
+const days=pv.periods(new Date('2026-11-06T20:00:00Z'));
+assert.equal(days.length,60);assert.equal(days[59],'2026110400');assert.equal(pv.range(days[0],days[59]).length,60);
+assert.throws(()=>pv.range('2026023000','2026043000'));assert.throws(()=>pv.title('../\nsecret'));
+const article='أحمد بن فضلان',items=days.map((d,i)=>({timestamp:d,article:'أحمد_بن_فضلان',project:'ar.wikipedia',access:'all-access',agent:'user',granularity:'daily',views:i<30?10:20}));
+const r=pv.summarize({items},article,days);assert.equal(r.previous,300);assert.equal(r.recent,600);assert.equal(r.change_percent,100);assert.ok(r.url.includes('wikimedia.org/'));
+assert.throws(()=>pv.summarize({items:items.slice(1)},article,days));assert.throws(()=>pv.summarize({items:items.map((x,i)=>i===1?items[0]:x)},article,days));assert.throws(()=>pv.summarize({items:items.map((x,i)=>i===1?{...x,views:-1}:x)},article,days));assert.throws(()=>pv.summarize({items:items.map(x=>({...x,article:'wrong'}))},article,days));
+const zeros=items.map(x=>({...x,views:0}));assert.equal(pv.summarize({items:zeros},article,days).change_percent,null);
+console.log('PASS: article pageviews complete UTC windows, no invented zero days, safe titles and zero baseline');

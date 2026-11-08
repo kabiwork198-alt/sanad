@@ -537,6 +537,11 @@ window.SANAD_BROWSER = true;
       for(const p of data.projects){if(ids.has(p.id))throw Error('أحد المشاريع موجود مسبقًا؛ لم يُستبدل أي مشروع');ids.add(p.id)}
       writeProjects([...data.projects,...existing]);return {count:data.projects.length};
     }
+    if(path==='/api/pageviews'){
+      const dates=SanadPageviews.range(data.start,data.end);
+      const r=await fetch(SanadPageviews.url(data.article,dates),{credentials:'omit',redirect:'error',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('تعذر جلب المشاهدات (HTTP '+r.status+')');
+      if(Number(r.headers.get('Content-Length')||0)>1000000)throw Error('استجابة المشاهدات كبيرة جدًا');let total=0,parts=[];const reader=r.body?.getReader();if(reader){try{while(true){const part=await reader.read();if(part.done)break;total+=part.value.length;if(total>1000000){await reader.cancel();throw Error('استجابة المشاهدات كبيرة جدًا')}parts.push(part.value)}}finally{reader.releaseLock()}}else{const part=new Uint8Array(await r.arrayBuffer());if(part.length>1000000)throw Error('استجابة المشاهدات كبيرة جدًا');parts=[part];total=part.length}const bytes=new Uint8Array(total);let at=0;for(const part of parts){bytes.set(part,at);at+=part.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+    }
     if(path==='/api/topics')return topics(data.category??'travel',data.query??'',data.cursor??'');
     if(path==='/api/topic-sections')return topicSections(data.page_id);
     if(path==='/api/qdl/search')return searchQdl(data.id,data.query);

@@ -21,6 +21,8 @@ jobs:
       - run: node --check web/ocr-journal.js
       - run: node --check web/history-dates.js
       - run: node --check web/hadith-lookup.js
+      - run: node --check web/pageviews.js
+      - run: node tests/test_pageviews.cjs
       - run: node --check web/open-access.js
       - run: node tests/test_open_access.cjs
       - run: node --check web/text-alignment.js
@@ -103,6 +105,11 @@ jobs:
           done
       - name: Test Persian and Turkish Wikisource discovery and page reading
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_regional.py
+      - name: Test pageviews and model-assisted research with simulated services
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_smart_research.py
+      - name: Diagnose live Wikimedia pageviews in Chromium
+        continue-on-error: true
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_local_pageviews.py
       - name: Test grounded topic ideas in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_topic_ideas.py
       - name: Diagnose real topic ideas and texts in Chromium
