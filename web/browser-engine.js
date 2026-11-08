@@ -213,6 +213,27 @@ window.SANAD_BROWSER = true;
     if(!text||new TextEncoder().encode(text).length>1800000)throw Error('النص غير متاح أو أكبر من الحد الآمن');
     return {title:String(item.title||'بلا عنوان').slice(0,300),page_id:id,language:lang,revision_id:String(item.revid),revision_url:'https://'+lang+'.wikisource.org/w/index.php?oldid='+item.revid,text,warning:'نص آلي مستخرج من صفحة معروضة وقد يضم ترويسات وحواشي أو أخطاء؛ المراجعة تخص الصفحة وقد يتغير المحتوى المضمّن والقوالب. رقم السطر ليس صفحة الطبعة. راجع صورة المصدر والطبعة والترجمة والحقوق.'};
   }
+  async function wikiListJSON(url){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);let size=0,chunks=[];
+    try{const r=await fetch(url,{signal:controller.signal,credentials:'omit',redirect:'error'});if(!r.ok)throw Error('HTTP '+r.status);if(Number(r.headers.get('Content-Length')||0)>2000000)throw Error('استجابة الفهرس كبيرة جدًا');
+      if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const v=await reader.read();if(v.done)break;size+=v.value.length;if(size>2000000){await reader.cancel();throw Error('استجابة الفهرس كبيرة جدًا')}chunks.push(v.value)}}finally{reader.releaseLock()}}
+      else{const v=new Uint8Array(await r.arrayBuffer());size=v.length;if(size>2000000)throw Error('استجابة الفهرس كبيرة جدًا');chunks=[v]}
+      const bytes=new Uint8Array(size);let at=0;for(const c of chunks){bytes.set(c,at);at+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+    }catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال');if(e instanceof TypeError)throw Error('تعذر الاتصال بويكي مصدر');throw e}finally{clearTimeout(timer)}
+  }
+  async function wikisourceSubpages(id,lang,cursor=''){
+    if(!['ar','en','fr','fa','tr'].includes(lang)||typeof id!=='string'||!/^[1-9][0-9]{0,12}$/.test(id))throw Error('معرّف صفحة أو لغة ويكي مصدر غير صالح');
+    if(typeof cursor!=='string'||cursor.length>500||/[\x00-\x1f\x7f]/.test(cursor))throw Error('مؤشر الصفحات غير صالح');
+    const host='https://'+lang+'.wikisource.org/w/api.php?',data=await wikiListJSON(host+params({action:'query',prop:'info',pageids:id,format:'json',formatversion:'2',origin:'*'}));
+    const pages=data?.query?.pages,item=Array.isArray(pages)&&pages.length===1?pages[0]:null,title=item?.title;
+    if(!item||String(item.pageid)!==id||item.ns!==0||typeof title!=='string'||!title.trim()||title.length>300)throw Error('صفحة ويكي مصدر غير صالحة أو ليست صفحة عمل');
+    const prefix=title.split('/')[0]+'/';if(cursor&&!cursor.replaceAll('_',' ').startsWith(prefix))throw Error('مؤشر الصفحات لا ينتمي إلى العمل');
+    const p={action:'query',list:'allpages',apnamespace:'0',apprefix:prefix,aplimit:'100',apfilterredir:'nonredirects',format:'json',formatversion:'2',origin:'*'};if(cursor)p.apcontinue=cursor;
+    const result=await wikiListJSON(host+params(p)),matches=result?.query?.allpages;if(!Array.isArray(matches))throw Error('تعذر قراءة قائمة الصفحات');
+    const out=[],seen=new Set();for(const row of matches.slice(0,100)){const id=row?.pageid,name=row?.title;if(!Number.isSafeInteger(id)||id<=0||id>=1e13||row.ns!==0||typeof name!=='string'||!name.startsWith(prefix)||name.length>300||seen.has(id))continue;seen.add(id);out.push({page_id:String(id),title:name})}
+    let more=result?.continue?.apcontinue;if(typeof more!=='string'||more.length>500||!more.replaceAll('_',' ').startsWith(prefix)||/[\x00-\x1f\x7f]/.test(more))more='';
+    return {page_id:id,language:lang,title,prefix,pages:out,next_cursor:more,truncated:matches.length>100||!!more,warning:'صفحات يبدأ عنوانها بالبادئة نفسها؛ قد لا تكون فصولًا أو نصوصًا كاملة، ولا يثبت ترتيبها أو اكتمال الكتاب. راجع الصفحات والطبعة والحقوق.'};
+  }
   async function internetArchive(q) {
     const phrase=q.replace(/\\/g,'\\\\').replace(/"/g,'\\"');
     const p=new URLSearchParams({q:`"${phrase}" AND mediatype:texts`,rows:'10',output:'json'});
@@ -491,6 +512,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/turath/read')return readTurath(data.book_id,data.page_id);
     if(path==='/api/internet-archive/read')return readInternetArchive(data.identifier);
     if(path==='/api/wikisource/read')return readWikisource(data.page_id);
+    if(path==='/api/wikisource/subpages')return wikisourceSubpages(data.page_id,data.language,data.cursor||'');
     if(path==='/api/wikisource/rendered')return readWikisourceRendered(data.page_id,data.language);
     if(path==='/api/openiti/read')return readOpeniti(data.path);
     if(path==='/api/openiti/search')return searchOpeniti(data.query);

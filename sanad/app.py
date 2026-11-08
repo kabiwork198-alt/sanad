@@ -339,6 +339,8 @@ class Handler(BaseHTTPRequestHandler):
             path = urllib.parse.urlsplit(self.path).path
             if path == '/api/topics':
                 return self.send(200, {'topics': wikipedia.topics(), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
+            if path == '/api/wikisource/subpages':
+                return self.send(200, catalogs.wikisource_subpages(body.get('page_id', ''), body.get('language', ''), body.get('cursor', '')))
             if path == '/api/wikisource/rendered':
                 return self.send(200, catalogs.read_wikisource_rendered(body.get('page_id', ''), body.get('language', '')))
             if path == '/api/wikisource/read':

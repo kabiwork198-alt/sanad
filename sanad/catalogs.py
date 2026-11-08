@@ -216,6 +216,37 @@ def read_wikisource_rendered(page_id, language):
             'warning':'نص آلي مستخرج من صفحة معروضة وقد يضم ترويسات وحواشي أو أخطاء؛ المراجعة تخص الصفحة وقد يتغير المحتوى المضمّن والقوالب. رقم السطر ليس صفحة الطبعة. راجع صورة المصدر والطبعة والترجمة والحقوق.'}
 
 
+def wikisource_subpages(page_id, language, cursor=''):
+    """List one bounded page of existing main-namespace subpages, never infer a book order."""
+    if language not in ('ar', 'en', 'fr', 'fa', 'tr'): raise ValueError('لغة ويكي مصدر غير مدعومة')
+    if not isinstance(page_id, str) or not re.fullmatch(r'[1-9][0-9]{0,12}', page_id): raise ValueError('معرّف صفحة ويكي مصدر غير صالح')
+    if not isinstance(cursor, str) or len(cursor)>500 or any(ord(c)<32 or ord(c)==127 for c in cursor): raise ValueError('مؤشر الصفحات غير صالح')
+    host='https://'+language+'.wikisource.org/w/api.php'
+    data=get_json(host, {'action':'query','prop':'info','pageids':page_id,'format':'json','formatversion':'2'})
+    pages=(data.get('query') or {}).get('pages') if isinstance(data,dict) else None
+    item=pages[0] if isinstance(pages,list) and len(pages)==1 and isinstance(pages[0],dict) else {}
+    title=item.get('title')
+    if str(item.get('pageid'))!=page_id or item.get('ns')!=0 or not isinstance(title,str) or not title.strip() or len(title)>300:
+        raise ValueError('صفحة ويكي مصدر غير صالحة أو ليست صفحة عمل')
+    prefix=title.split('/')[0]+'/'
+    if cursor and not cursor.replace('_',' ').startswith(prefix): raise ValueError('مؤشر الصفحات لا ينتمي إلى العمل')
+    params={'action':'query','list':'allpages','apnamespace':'0','apprefix':prefix,'aplimit':'100','apfilterredir':'nonredirects','format':'json','formatversion':'2'}
+    if cursor: params['apcontinue']=cursor
+    result=get_json(host,params)
+    matches=(result.get('query') or {}).get('allpages') if isinstance(result,dict) else None
+    if not isinstance(matches,list): raise ValueError('تعذر قراءة قائمة الصفحات')
+    out=[];seen=set()
+    for row in matches[:100]:
+        if not isinstance(row,dict): continue
+        ident=row.get('pageid');name=row.get('title')
+        if not isinstance(ident,int) or isinstance(ident,bool) or not 0<ident<10**13 or row.get('ns')!=0 or not isinstance(name,str) or not name.startswith(prefix) or len(name)>300 or ident in seen: continue
+        seen.add(ident);out.append({'page_id':str(ident),'title':name})
+    more=(result.get('continue') or {}).get('apcontinue') if isinstance(result.get('continue'),dict) else ''
+    if not isinstance(more,str) or len(more)>500 or not more.replace('_',' ').startswith(prefix) or any(ord(c)<32 or ord(c)==127 for c in more): more=''
+    return {'page_id':page_id,'language':language,'title':title,'prefix':prefix,'pages':out,'next_cursor':more,'truncated':len(matches)>100 or bool(more),
+            'warning':'صفحات يبدأ عنوانها بالبادئة نفسها؛ قد لا تكون فصولًا أو نصوصًا كاملة، ولا يثبت ترتيبها أو اكتمال الكتاب. راجع الصفحات والطبعة والحقوق.'}
+
+
 def openlibrary_editions(work_id, offset=0):
     """List one page of editions, preserving distinct Archive item IDs and provenance."""
     if not isinstance(work_id, str) or not re.fullmatch(r'OL[0-9]{1,12}W', work_id):
