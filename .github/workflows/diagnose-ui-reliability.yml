@@ -1,0 +1,43 @@
+name: Diagnose intermittent UI tests
+on:
+  push:
+    branches:
+      - 'arena/592bf7be-sanad'
+    paths:
+      - '.github/workflows/diagnose-ui-reliability.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        test: [ui_local_hadith.py, ui_local_research_network.py]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser driver
+        run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
+      - name: Repeat independently with synthetic providers
+        shell: bash
+        env:
+          TEST_NAME: ${{ matrix.test }}
+        run: |
+          export NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules"
+          for i in $(seq 1 25); do
+            echo "Iteration $i: $TEST_NAME"
+            if python "tests/$TEST_NAME" > "$RUNNER_TEMP/ui-repeat.log" 2>&1; then
+              cat "$RUNNER_TEMP/ui-repeat.log"
+            else
+              status=$?
+              cat "$RUNNER_TEMP/ui-repeat.log"
+              detail=$(tail -30 "$RUNNER_TEMP/ui-repeat.log" | tr '\n' ' ' | sed 's/%/%25/g')
+              echo "::error title=Intermittent UI failure::$TEST_NAME iteration=$i $detail"
+              exit "$status"
+            fi
+          done

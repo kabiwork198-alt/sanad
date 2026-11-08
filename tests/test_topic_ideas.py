@@ -1,8 +1,18 @@
 import unittest
-from unittest.mock import patch
-from sanad import wikipedia
+from unittest.mock import patch, MagicMock
+from sanad import wikipedia, catalogs
+from sanad.http_identity import USER_AGENT
 
 class TopicIdeas(unittest.TestCase):
+    def test_wikimedia_requests_identify_project(self):
+        response=MagicMock();response.__enter__.return_value.read.return_value=b'{}'
+        with patch('urllib.request.urlopen',return_value=response) as send:
+            wikipedia.get_json({'action':'query'})
+            self.assertEqual(send.call_args.args[0].get_header('User-agent'),USER_AGENT)
+            catalogs.get_json('https://ar.wikisource.org/w/api.php',{'action':'query'})
+            self.assertEqual(send.call_args.args[0].get_header('User-agent'),USER_AGENT)
+        self.assertIn('https://github.com/kabiwork198-alt/sanad',USER_AGENT)
+
     def test_real_metadata_mapping_and_cursor(self):
         data={'continue':{'gcmcontinue':'page|d8a3|123'},'query':{'pages':[
             {'pageid':1,'ns':0,'title':'شخص','extract':'كان رحالة له رحلة ومخطوطات عن التاريخ والبلدان في ذلك العصر.'},

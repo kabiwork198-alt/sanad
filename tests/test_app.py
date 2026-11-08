@@ -116,6 +116,17 @@ class SanadTest(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as cm:urllib.request.urlopen(req)
             self.assertEqual(cm.exception.code,503);self.assertNotIn('secret',cm.exception.read().decode())
 
+    def test_topic_http_rate_limit_is_reported_without_retry(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),app.Handler); old_port=app.PORT; app.PORT=server.server_port
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        self.addCleanup(thread.join,2);self.addCleanup(setattr,app,'PORT',old_port);self.addCleanup(server.server_close);self.addCleanup(server.shutdown)
+        base=f'http://127.0.0.1:{app.PORT}'
+        error=urllib.error.HTTPError('https://ar.wikipedia.org/w/api.php',429,'limit',{},None)
+        with mock.patch('sanad.wikipedia.topics',side_effect=error) as fetch:
+            req=urllib.request.Request(base+'/api/topics',data=b'{}',headers={'X-Sanad-Token':app.TOKEN,'Origin':base,'Content-Type':'application/json'})
+            with self.assertRaises(urllib.error.HTTPError) as cm: urllib.request.urlopen(req)
+            self.assertEqual(cm.exception.code,502); self.assertIn('HTTP 429',json.loads(cm.exception.read())['error']);fetch.assert_called_once()
+
     def test_http_token_origin_host_and_save(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), app.Handler)
         old_port = app.PORT

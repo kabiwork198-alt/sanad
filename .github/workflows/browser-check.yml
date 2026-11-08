@@ -123,7 +123,17 @@ jobs:
       - name: Test multi-query research UI in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_research_expanded.py
       - name: Test real local research HTTP API with mocked providers
-        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_research_network.py
+        run: |
+          set +e
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_research_network.py > "$RUNNER_TEMP/research-ui-test.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/research-ui-test.log"
+          if [ "$status" -ne 0 ]; then
+            detail=$(tail -25 "$RUNNER_TEMP/research-ui-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+            echo "::error title=Research HTTP UI test failed::$detail"
+          fi
+          exit "$status"
       - name: Test MinerU result import in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_mineru.py
       - name: Test complete backup interoperability

@@ -441,6 +441,14 @@ $('#open-guide').onclick=()=>{showView('guide',true);window.scrollTo(0,0)};
 $('#back-workspace').onclick=()=>{showView('workspace',true);window.scrollTo(0,0)};
 document.querySelector('.guide-jump').onclick=e=>{e.preventDefault();showView('guide',true);window.scrollTo(0,0)};
 window.addEventListener('hashchange',()=>{if(location.hash==='#source-guide')showView('guide')});
+function appendTopicManualLink(options){
+ const categories={travel:'تصنيف:رحالة مسلمون',andalus:'تصنيف:تاريخ الأندلس',battles:'تصنيف:معارك العرب',maghreb:'تصنيف:تاريخ المغرب',islamic:'تصنيف:تاريخ إسلامي'};
+ const query=options.query?.trim()||'';let url;
+ if(query.length>=2&&query.length<=120){url=new URL('https://ar.wikipedia.org/w/index.php');url.searchParams.set('search',query)}
+ else if(!query&&Object.hasOwn(categories,options.category))url=new URL('https://ar.wikipedia.org/wiki/'+encodeURIComponent(categories[options.category].replaceAll(' ','_')));
+ else return;
+ const p=document.createElement('p'),a=document.createElement('a');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent=query?'افتح بحث ويكيبيديا يدويًا (يرسل عبارتك عند الضغط) ↗':'افتح التصنيف في ويكيبيديا يدويًا ↗';p.append(a);$('#home-topics').append(p);
+}
 async function loadTopics(options,button){
  if(!confirm(options.query?`ستُرسل عبارة «${options.query}» إلى ويكيبيديا العربية للبحث في مقالاتها. هل تتابع؟`:'سيُطلب تصنيف واحد من ويكيبيديا العربية، دون قياس للرواج. هل تتابع؟'))return;
  const previous=homeTopics,more=!!options.cursor&&!!previous,request=++homeTopicRequest;homeTopicSectionsRequest++;homeTopicPending=true;button.disabled=true;
@@ -450,7 +458,7 @@ async function loadTopics(options,button){
   const fresh=found.topics.map(x=>({...x,accessed_at:found.searched_at}));
   if(more&&homeTopics===previous){const ids=new Set(previous.topics.map(x=>x.id)),added=fresh.filter(x=>!ids.has(x.id));homeTopics={...found,topics:[...previous.topics,...added].slice(0,120)};showTopics(added.length?'':'لم تضف هذه المجموعة نتائج جديدة؛ يمكنك تجربة المجموعة التالية إن وُجدت.')}
   else{homeTopics={...found,topics:fresh};homeTopicSections=null;showTopics()}
- }catch(err){if(request===homeTopicRequest){homeTopicPending=false;const message='تعذر جلب المقالات من ويكيبيديا: '+(err.message||'تعذر الاتصال')+'. لا توجد بيانات بديلة تجريبية؛ حاول لاحقًا.';if(previous){homeTopics=previous;showTopics(message+' النتائج السابقة ما زالت معروضة.')}else{homeTopics=null;homeTopicSections=null;$('#home-topics').textContent=message}}}finally{if(request===homeTopicRequest)homeTopicPending=false;if(button.isConnected)button.disabled=false}
+ }catch(err){if(request===homeTopicRequest){homeTopicPending=false;const message='تعذر جلب المقالات من ويكيبيديا: '+(err.message||'تعذر الاتصال')+'. لا توجد بيانات بديلة تجريبية؛ حاول لاحقًا.';if(previous){homeTopics=previous;showTopics(message+' النتائج السابقة ما زالت معروضة.')}else{homeTopics=null;homeTopicSections=null;$('#home-topics').textContent=message}appendTopicManualLink(options)}}finally{if(request===homeTopicRequest)homeTopicPending=false;if(button.isConnected)button.disabled=false}
 }
 $('#home-discover').onclick=$('#topic-search').onclick=e=>loadTopics({category:$('#topic-category').value,query:$('#topic-query').value.trim(),cursor:''},e.currentTarget);
 $('#home-topics').onclick=async e=>{

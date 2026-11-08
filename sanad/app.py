@@ -19,6 +19,7 @@ from contextlib import closing
 from pathlib import Path
 
 from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl, openiti_corpus, open_access
+from sanad.http_identity import USER_AGENT
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -194,7 +195,7 @@ def search_commons(query):
     params = {'action': 'query', 'generator': 'search', 'gsrsearch': query, 'gsrnamespace': 6,
               'gsrlimit': 8, 'prop': 'imageinfo', 'iiprop': 'url|extmetadata', 'format': 'json', 'formatversion': 2}
     url = 'https://commons.wikimedia.org/w/api.php?' + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'SanadStudio/0.1 (local research tool)'})
+    req = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': USER_AGENT})
     with urllib.request.urlopen(req, timeout=15) as response:
         payload = json.loads(response.read(2_000_000))
     result = []
@@ -342,7 +343,7 @@ class Handler(BaseHTTPRequestHandler):
                     if path == '/api/topic-sections': return self.send(200, {**wikipedia.topic_sections(body.get('page_id', '')), 'retrieved_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
                     return self.send(200, {**wikipedia.topics(body.get('category', 'travel'), body.get('query', ''), body.get('cursor', '')), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
                 except urllib.error.HTTPError as exc:
-                    return self.send(502, {'error': f'تعذر الوصول إلى ويكيبيديا (HTTP {exc.code}). حاول لاحقًا.'})
+                    return self.send(502, {'error': ('حدّت ويكيبيديا الطلبات (HTTP 429)؛ انتظر ثم حاول لاحقًا أو افتح ويكيبيديا يدويًا.' if exc.code == 429 else f'تعذر الوصول إلى ويكيبيديا (HTTP {exc.code}). حاول لاحقًا.')})
             if path == '/api/wikisource/subpages':
                 return self.send(200, catalogs.wikisource_subpages(body.get('page_id', ''), body.get('language', ''), body.get('cursor', '')))
             if path == '/api/wikisource/rendered':

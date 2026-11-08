@@ -1,4 +1,5 @@
 """Public catalog search. Results are leads, not proof of access or rights."""
+from sanad.http_identity import USER_AGENT
 import json
 import re
 import urllib.parse
@@ -7,7 +8,7 @@ import urllib.request
 
 def get_json(host, params):
     url = host + '?' + urllib.parse.urlencode(params, doseq=True)
-    req = urllib.request.Request(url, headers={'Accept':'application/json', 'User-Agent':'SanadStudio/0.1 (local research tool)'})
+    req = urllib.request.Request(url, headers={'Accept':'application/json', 'User-Agent':USER_AGENT})
     with urllib.request.urlopen(req, timeout=15) as response:
         data = response.read(2_000_001)
     if len(data) > 2_000_000:

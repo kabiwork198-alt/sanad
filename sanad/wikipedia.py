@@ -5,6 +5,7 @@ import urllib.parse
 import urllib.request
 import unicodedata
 from html.parser import HTMLParser
+from sanad.http_identity import USER_AGENT
 
 API = 'https://ar.wikipedia.org/w/api.php?'
 CATEGORY = 'تصنيف:تاريخ إسلامي'
@@ -12,7 +13,7 @@ CATEGORY = 'تصنيف:تاريخ إسلامي'
 
 def get_json(params):
     params = dict(params, format='json', formatversion='2')
-    request = urllib.request.Request(API + urllib.parse.urlencode(params), headers={'Accept': 'application/json', 'User-Agent': 'SanadStudio/0.1 (local research tool)'})
+    request = urllib.request.Request(API + urllib.parse.urlencode(params), headers={'Accept': 'application/json', 'User-Agent': USER_AGENT})
     with urllib.request.urlopen(request, timeout=15) as response:
         data = response.read(3_000_001)
     if len(data) > 3_000_000:
