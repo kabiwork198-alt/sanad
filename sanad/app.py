@@ -323,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(content)))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; connect-src 'self' data: https://api.github.com/repos/fawazahmed0/hadith-api/contents/; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; connect-src 'self' data: https:; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         try:
             self.end_headers()
             self.wfile.write(content)
@@ -342,12 +342,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed_host():
             return self.send(403, {'error': 'طلب غير مسموح'})
         path = urllib.parse.urlsplit(self.path).path
-        if path in ('/', '/index.html', '/app.js', '/style.css', '/mineru-import.js', '/research-planner.js', '/ocr-journal.js', '/history-dates.js', '/hadith-lookup.js', '/text-alignment.js', '/open-access.js', '/pageviews.js', '/source-analysis.js'):
+        if path in ('/', '/index.html', '/app.js', '/style.css', '/mineru-import.js', '/research-planner.js', '/ocr-journal.js', '/history-dates.js', '/hadith-lookup.js', '/text-alignment.js', '/open-access.js', '/pageviews.js', '/source-analysis.js', '/cloud-ai.js'):
             name = 'index.html' if path in ('/', '/index.html') else path[1:]
             content = (ROOT / 'web' / name).read_bytes()
             if name == 'index.html':
                 content = content.replace(b'__SANAD_TOKEN__', TOKEN.encode('ascii'))
-            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'mineru-import.js': 'text/javascript; charset=utf-8', 'research-planner.js': 'text/javascript; charset=utf-8', 'ocr-journal.js': 'text/javascript; charset=utf-8', 'history-dates.js': 'text/javascript; charset=utf-8', 'hadith-lookup.js': 'text/javascript; charset=utf-8', 'text-alignment.js': 'text/javascript; charset=utf-8', 'open-access.js': 'text/javascript; charset=utf-8', 'pageviews.js': 'text/javascript; charset=utf-8', 'source-analysis.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'mineru-import.js': 'text/javascript; charset=utf-8', 'research-planner.js': 'text/javascript; charset=utf-8', 'ocr-journal.js': 'text/javascript; charset=utf-8', 'history-dates.js': 'text/javascript; charset=utf-8', 'hadith-lookup.js': 'text/javascript; charset=utf-8', 'text-alignment.js': 'text/javascript; charset=utf-8', 'open-access.js': 'text/javascript; charset=utf-8', 'pageviews.js': 'text/javascript; charset=utf-8', 'source-analysis.js': 'text/javascript; charset=utf-8', 'cloud-ai.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
         vendor = {
             '/vendor/pdf.min.mjs': ('pdf.min.mjs', 'text/javascript; charset=utf-8'),
             '/vendor/pdf.worker.min.mjs': ('pdf.worker.min.mjs', 'text/javascript; charset=utf-8'),
