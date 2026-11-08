@@ -27,7 +27,14 @@ with tempfile.TemporaryDirectory() as folder:
             env = os.environ.copy()
             env['SANAD_TEST_ORIGIN'] = f'http://127.0.0.1:{server.server_port}/'
             print('text alignment:', mode, flush=True)
-            subprocess.run(['node', 'tests/ui_text_alignment.cjs'], env=env, cwd=root, check=True, timeout=90)
+            result = subprocess.run(['node', 'tests/ui_text_alignment.cjs'], env=env, cwd=root, capture_output=True, text=True, timeout=90)
+            print(result.stdout, end='', flush=True)
+            print(result.stderr, end='', file=sys.stderr, flush=True)
+            if result.returncode:
+                if os.environ.get('GITHUB_ACTIONS'):
+                    detail = (result.stderr or result.stdout or 'No output').replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                    print(f'::error file=tests/ui_text_alignment.cjs::Alignment test failed in {mode}: {detail}', flush=True)
+                raise subprocess.CalledProcessError(result.returncode, result.args)
         finally:
             server.shutdown()
             server.server_close()
