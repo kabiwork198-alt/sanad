@@ -64,7 +64,7 @@ def topics(category='travel', query='', cursor=''):
         return ''.join(c for c in value if not unicodedata.combining(c))
     terms=[t for t in re.findall(r'[^\W_]+',norm(query)) if len(t)>=3 and t not in ('ابن','تاريخ','كتاب','على','إلى','الى')]
     if not any(t in norm(query) for t in ('مسلسل','فيلم','روايه')):
-        found=[x for x in found if not re.search(r'\((?:مسلسل|فيلم|رواية)(?:\s|\))',x['title'])]
+        found=[x for x in found if not re.search(r'\((?:مسلسل|فيلم|رواية)(?:\s|\))',x['title']) and not re.search(r'(?:هو|هي)\s+(?:فيلم|مسلسل|رواية)\b',x['extract'][:250])]
     if terms: found=[x for x in found if any(t in norm(x['title']+' '+x['extract']) for t in terms)]
     found.sort(key=(lambda x:(-sum(t in norm(x['title']) for t in terms),-sum(t in norm(x['extract']) for t in terms),x['index'])) if query else (lambda x:-x['score']))
     for row in found: row.pop('score');row.pop('index')

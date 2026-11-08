@@ -22,7 +22,8 @@ class TopicIdeas(unittest.TestCase):
             {'pageid':1,'ns':0,'title':'مغن معاصر','index':1,'extract':'مغن معاصر معروف يغني الأغاني في كثير من المدن والبلدان.'},
             {'pageid':2,'ns':0,'title':'أحمد بن فضلان','index':3,'extract':'رحالة كتب وصفًا في رحلته إلى بلدان بعيدة واكتشاف شعوب جديدة.'},
             {'pageid':3,'ns':0,'title':'فيلم تاريخي','index':2,'extract':'فيلم مستوحى من رحلة ابن فضلان ويتناول رحلته الشهيرة في القرن العاشر.'},
-            {'pageid':4,'ns':0,'title':'سقف العالم (مسلسل)','index':4,'extract':'مسلسل عن رحلة ابن فضلان ويتناول سفارته إلى ملك الصقالبة.'}]}}
+            {'pageid':4,'ns':0,'title':'سقف العالم (مسلسل)','index':4,'extract':'مسلسل عن رحلة ابن فضلان ويتناول سفارته إلى ملك الصقالبة.'},
+            {'pageid':5,'ns':0,'title':'المحارب الثالث عشر','index':5,'extract':'المحارب الثالث عشر هو فيلم يتناول شخصية أحمد بن فضلان ورحلته.'}]}}
         with patch.object(wikipedia,'get_json',return_value=data): r=wikipedia.topics('travel','ابن فضلان')
         self.assertEqual([x['id'] for x in r['topics']],['2','3'])
 
