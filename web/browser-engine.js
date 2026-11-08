@@ -497,6 +497,7 @@ window.SANAD_BROWSER = true;
     if(path==='/api/research')return research(data.query,data.provider);
     if(path==='/api/crossref')return {results:await crossref(data.query)};
     if(path==='/api/openlibrary')return {results:await openlibrary(data.query)};
+    if(path==='/api/openalex/locations')return window.SanadOpenAccess.search(data.identifier);
     if(path==='/api/openlibrary/editions')return openlibraryEditions(data.work_id,data.offset??0);
     if(path==='/api/youtube')return {results:await youtube(data.query,data.key)};
     if(path==='/api/library/import')return {document:await importDocument(data.name,data.content)};

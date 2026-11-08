@@ -40,6 +40,8 @@ jobs:
         run: python -c "import runpy; runpy.run_path('tests/live_qdl.py')"
       - name: Diagnose multilingual Wikisource
         run: python -c "import runpy; runpy.run_path('tests/live_wikisource_multilingual.py')"
+      - name: Diagnose live OpenAlex open-copy lookup
+        run: python -c "import runpy; runpy.run_path('tests/live_open_access.py')"
       - name: Diagnose live Open Library editions and OCR
         run: python -c "import runpy; runpy.run_path('tests/live_openlibrary_editions.py')"
       - name: Diagnose local search over real OpenITI ZIP sample
@@ -88,6 +90,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { Write-Warning 'Live hadith service unavailable; this diagnostic does not assess text or rights.' }
             Test-BundledUi 'tests/ui_pdf_security.cjs'
             Test-BundledUi 'tests/ui_history.cjs'
+            Test-BundledUi 'tests/ui_open_access.cjs'
             Test-BundledUi 'tests/ui_research_expanded.cjs'
             Test-BundledUi 'tests/ui_heritage_research.cjs'
             Test-BundledUi 'tests/ui_ocr_batch.cjs'

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from contextlib import closing
 from pathlib import Path
 
-from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl, openiti_corpus
+from sanad import library, workflow, wikipedia, catalogs, openiti, shamela, internet_archive, turath, alexandria_archive, qdl, openiti_corpus, open_access
 
 def runtime_paths():
     # PyInstaller extracts bundled static assets to _MEIPASS, which is temporary.
@@ -298,12 +298,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed_host():
             return self.send(403, {'error': 'طلب غير مسموح'})
         path = urllib.parse.urlsplit(self.path).path
-        if path in ('/', '/index.html', '/app.js', '/style.css', '/mineru-import.js', '/research-planner.js', '/ocr-journal.js', '/history-dates.js', '/hadith-lookup.js', '/text-alignment.js'):
+        if path in ('/', '/index.html', '/app.js', '/style.css', '/mineru-import.js', '/research-planner.js', '/ocr-journal.js', '/history-dates.js', '/hadith-lookup.js', '/text-alignment.js', '/open-access.js'):
             name = 'index.html' if path in ('/', '/index.html') else path[1:]
             content = (ROOT / 'web' / name).read_bytes()
             if name == 'index.html':
                 content = content.replace(b'__SANAD_TOKEN__', TOKEN.encode('ascii'))
-            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'mineru-import.js': 'text/javascript; charset=utf-8', 'research-planner.js': 'text/javascript; charset=utf-8', 'ocr-journal.js': 'text/javascript; charset=utf-8', 'history-dates.js': 'text/javascript; charset=utf-8', 'hadith-lookup.js': 'text/javascript; charset=utf-8', 'text-alignment.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+            return self.send(200, content, {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'mineru-import.js': 'text/javascript; charset=utf-8', 'research-planner.js': 'text/javascript; charset=utf-8', 'ocr-journal.js': 'text/javascript; charset=utf-8', 'history-dates.js': 'text/javascript; charset=utf-8', 'hadith-lookup.js': 'text/javascript; charset=utf-8', 'text-alignment.js': 'text/javascript; charset=utf-8', 'open-access.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
         vendor = {
             '/vendor/pdf.min.mjs': ('pdf.min.mjs', 'text/javascript; charset=utf-8'),
             '/vendor/pdf.worker.min.mjs': ('pdf.worker.min.mjs', 'text/javascript; charset=utf-8'),
@@ -405,6 +405,8 @@ class Handler(BaseHTTPRequestHandler):
                 if path == '/api/prepare-prompt':
                     return self.send(200, {'prompt': workflow.script_prompt(project)})
                 return self.send(200, workflow.script_draft(project))
+            if path == '/api/openalex/locations':
+                return self.send(200, open_access.search(body.get('identifier')))
             if path == '/api/openlibrary/editions':
                 return self.send(200, catalogs.openlibrary_editions(body.get('work_id', ''), body.get('offset', 0)))
             if path == '/api/openlibrary':

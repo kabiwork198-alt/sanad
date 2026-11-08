@@ -21,6 +21,8 @@ jobs:
       - run: node --check web/ocr-journal.js
       - run: node --check web/history-dates.js
       - run: node --check web/hadith-lookup.js
+      - run: node --check web/open-access.js
+      - run: node tests/test_open_access.cjs
       - run: node --check web/text-alignment.js
       - run: node tests/test_text_alignment.cjs
       - run: node tests/test_hadith_lookup.cjs
@@ -82,6 +84,13 @@ jobs:
           NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_heritage_browser.py
       - name: Test Persian and Turkish Wikisource discovery and page reading
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_regional.py
+      - name: Test open-copy lookup in both modes
+        run: |
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_open_access.py
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_open_access_real.py
+      - name: Diagnose live OpenAlex in Chromium (availability may vary)
+        continue-on-error: true
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_local_open_access.py
       - name: Test multi-query research UI in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_research_expanded.py
       - name: Test real local research HTTP API with mocked providers
