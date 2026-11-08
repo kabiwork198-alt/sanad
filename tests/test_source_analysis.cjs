@@ -9,3 +9,12 @@ console.log('PASS: exact quote membership, invalid outputs rejected and no factu
 const items=[{id:'P1',sourceId:'a',title:'أ',quote:'نص أول'},{id:'P2',sourceId:'b',title:'ب',quote:'نص ثانٍ'},{id:'P3',sourceId:'a',title:'أ',quote:'نص ثالث'}];
 const out=a.parseComparison(JSON.stringify({comparisons:[{observation:'اتفاق محتمل',refs:['P1','P2']},{observation:'مراجع مختلقة',refs:['P1','P9']},{observation:'مصدر واحد',refs:['P1','P3']}]}),items);
 assert.equal(out.comparisons.length,1);assert.equal(out.rejected,2);assert.equal(out.comparisons[0].refs[1].title,'ب');assert.throws(()=>a.parseComparison('نص فقط',items));
+(async()=>{
+ const batch={kind:'text',cursor:{offset:0},next_cursor:null,scanned:1,total:1,empty_pages:[],segments:[{location:'محارف 1–50',text:'هذا نص تاريخي حقيقي داخل ملف المصدر الذي يحتاج المراجعة.'},{location:'محارف 51–100',text:'نص مختلف يحتاج قراءة ومقارنة مع المصدر الأصلي.'}]};
+ const r={...batch,fileId:'a'.repeat(64),next:1,findings:[{segmentIndex:0,location:batch.segments[0].location,claim:'تفسير أولي',quote:'نص تاريخي حقيقي داخل ملف المصدر'}],rejected:0,model:'local',question:'ما السياق؟',topic:'موضوع البحث',coverage:{batches:0,parts:0,empty:0,rejected:0}};
+ const text=await a.checkpoint(r),state=await a.restore(text,batch,r.fileId);assert.equal(state.next,1);assert.equal(state.findings[0].quote,r.findings[0].quote);
+ await assert.rejects(()=>a.restore(text,{...batch,segments:[{...batch.segments[0],text:'تغير النص'},batch.segments[1]]},r.fileId));
+ const invalid=JSON.parse(text);invalid.findings[0].quote='اقتباس وهمي غير موجود في أي نص';await assert.rejects(()=>a.restore(JSON.stringify(invalid),batch,r.fileId));
+ invalid.findings[0].segmentIndex=1;await assert.rejects(()=>a.restore(JSON.stringify(invalid),batch,r.fileId));
+ await assert.rejects(()=>a.restore(text,batch,'b'.repeat(64)));console.log('PASS: checkpoint restoration rejects drift, wrong file, false quotes and unprocessed positions');
+})().catch(e=>{console.error(e);process.exitCode=1});
