@@ -104,6 +104,7 @@ jobs:
             Test-BundledUi 'tests/ui_wikisource_batch.cjs'
             Remove-Item Env:SANAD_TEST_MOCK_API
             Test-BundledUi 'tests/ui_smart_research.cjs'
+            Test-BundledUi 'tests/ui_source_reading.cjs'
             Test-BundledUi 'tests/ui_research_expanded.cjs'
             Test-BundledUi 'tests/ui_heritage_research.cjs'
             Test-BundledUi 'tests/ui_ocr_batch.cjs'

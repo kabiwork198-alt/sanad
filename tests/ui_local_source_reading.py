@@ -1,0 +1,14 @@
+"""Real local HTTP and files with a simulated model; not a live LM Studio test."""
+import os, subprocess, sys, tempfile, threading
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+root=Path(__file__).resolve().parents[1];sys.path.insert(0,str(root))
+from sanad import app
+with tempfile.TemporaryDirectory() as folder:
+    app.DATA=Path(folder);app.DB=app.DATA/'test.sqlite3'
+    server=ThreadingHTTPServer(('127.0.0.1',0),app.Handler);app.PORT=server.server_port
+    thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+    try:
+        env=os.environ.copy();env['SANAD_TEST_ORIGIN']=f'http://127.0.0.1:{server.server_port}/'
+        subprocess.run(['node','tests/ui_source_reading.cjs'],env=env,cwd=root,check=True,timeout=90)
+    finally:server.shutdown();server.server_close();thread.join()

@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),a=require('../web/source-analysis.js');
+const seg={location:'صفحة PDF 1',text:'قال المؤلف إن الرحلة استغرقت شهرين، ثم رجع إلى بغداد.'};
+const good={claim:'يصف المؤلف مدة الرحلة',quote:'الرحلة استغرقت شهرين'};
+assert.deepEqual(a.parse(JSON.stringify({findings:[good]}),seg),{findings:[{...good,location:seg.location}],rejected:0});
+assert.equal(a.parse('```json\n'+JSON.stringify({findings:[good,{claim:'زعم',quote:'هذه جملة مختلقة تمامًا'}]})+'\n```',seg).rejected,1);
+assert.throws(()=>a.parse('نص غير منظم',seg));assert.throws(()=>a.parse('{"findings":[1,2,3,4]}',seg));
+assert.equal(a.parse('{"findings":[]}',seg).findings.length,0);assert(a.prompt('موضوع','السؤال',seg).includes(seg.text));
+console.log('PASS: exact quote membership, invalid outputs rejected and no factual validation implied');
+const items=[{id:'P1',sourceId:'a',title:'أ',quote:'نص أول'},{id:'P2',sourceId:'b',title:'ب',quote:'نص ثانٍ'},{id:'P3',sourceId:'a',title:'أ',quote:'نص ثالث'}];
+const out=a.parseComparison(JSON.stringify({comparisons:[{observation:'اتفاق محتمل',refs:['P1','P2']},{observation:'مراجع مختلقة',refs:['P1','P9']},{observation:'مصدر واحد',refs:['P1','P3']}]}),items);
+assert.equal(out.comparisons.length,1);assert.equal(out.rejected,2);assert.equal(out.comparisons[0].refs[1].title,'ب');assert.throws(()=>a.parseComparison('نص فقط',items));

@@ -202,3 +202,76 @@ def search_document(data_dir, ident, query, mode='basic'):
     if mode == 'arabic-variants':
         warning += ' مطابقة مرنة للألف والياء فقط؛ قد تشمل أسماء مختلفة ولا تشمل جميع اختلافات التهجئة.'
     return {'match_mode': mode, 'matches': matches, 'scanned': scanned, 'total': total_pages, 'partial': scanned < total_pages or len(matches) >= MAX_MATCHES, 'warning': warning}
+
+# One session's bounded reading set; no OCR or remote access is attempted.
+ANALYSIS_CHARS = 1800
+ANALYSIS_SEGMENTS = 200
+
+def analysis_segments(data_dir, ident, cursor=None):
+    """Extract one bounded consecutive batch, with a resumable position.
+
+    Positions refer to extracted Unicode text, not printed page numbers. A
+    cursor is local to the content-addressed file and is never a filesystem path.
+    """
+    data = read_verified_document(data_dir, ident)
+    pdf = b'%PDF-' in data[:1024]
+    segments, empty_pages = [], []
+    scanned, next_cursor = 0, None
+    if cursor is None:
+        cursor = {'page': 1, 'offset': 0} if pdf else {'offset': 0}
+    keys = {'page', 'offset'} if pdf else {'offset'}
+    if not isinstance(cursor, dict) or set(cursor) != keys or any(type(v) is not int or v < 0 for v in cursor.values()) or (pdf and cursor['page'] < 1):
+        raise ValueError('موضع الاستكمال غير صالح')
+    if pdf:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(data), strict=False)
+            if reader.is_encrypted:
+                raise ValueError('الملف مشفر؛ أضف نسخة مسموحة قابلة للقراءة')
+            total = len(reader.pages)
+            start_page = cursor['page'] - 1
+            if start_page >= total:
+                raise ValueError('موضع الصفحة خارج الملف')
+            for page in range(start_page, min(total, start_page + MAX_PAGES)):
+                text = reader.pages[page].extract_text() or ''
+                scanned += 1
+                start = cursor['offset'] if page == start_page else 0
+                if start > len(text):
+                    raise ValueError('موضع المحرف خارج الصفحة')
+                if not text.strip():
+                    empty_pages.append(page + 1)
+                    continue
+                for offset in range(start, len(text), ANALYSIS_CHARS):
+                    if len(segments) >= ANALYSIS_SEGMENTS:
+                        next_cursor = {'page': page + 1, 'offset': offset}
+                        break
+                    piece = text[offset:offset + ANALYSIS_CHARS]
+                    segments.append({'location': f'صفحة PDF {page + 1}، محارف النص المستخرج {offset + 1}–{offset + len(piece)}', 'text': piece})
+                if next_cursor:
+                    break
+            if next_cursor is None and start_page + scanned < total:
+                next_cursor = {'page': start_page + scanned + 1, 'offset': 0}
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError('تعذر استخراج نص PDF؛ قد يكون تالفًا أو غير مدعوم') from exc
+    else:
+        try:
+            text = data.decode('utf-8-sig')
+        except UnicodeDecodeError as exc:
+            raise ValueError('تعذر قراءة الملف النصي بترميز UTF-8') from exc
+        total = 1
+        scanned = 1
+        start = cursor['offset']
+        if start > len(text):
+            raise ValueError('موضع المحرف خارج الملف')
+        for offset in range(start, len(text), ANALYSIS_CHARS):
+            if len(segments) >= ANALYSIS_SEGMENTS:
+                next_cursor = {'offset': offset}
+                break
+            piece = text[offset:offset + ANALYSIS_CHARS]
+            segments.append({'location': f'محارف النص {offset + 1}–{offset + len(piece)} (ليست صفحات الطبعة)', 'text': piece})
+    return {'segments': segments, 'kind': 'pdf' if pdf else 'text', 'scanned': scanned, 'total': total,
+            'partial': next_cursor is not None, 'next_cursor': next_cursor, 'cursor': cursor,
+            'empty_pages': empty_pages, 'segment_limit': ANALYSIS_SEGMENTS,
+            'warning': 'النص مستخرج آليًا؛ الصفحات بلا نص قد تكون صورًا أو فارغة، والموضع ليس رقم صفحة الطبعة. طابق النص والأصل والحقوق.'}
