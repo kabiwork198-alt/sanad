@@ -246,10 +246,11 @@ class CatalogTest(unittest.TestCase):
 
 class WikipediaTest(unittest.TestCase):
     def test_topics_only_accepts_article_ids(self):
-        payload = {'query': {'categorymembers': [{'pageid':1319, 'title':'الخوارزمي'}, {'pageid':'bad', 'title':'fake'}]}}
-        with mock.patch('sanad.wikipedia.get_json', return_value=payload):
-            result = wikipedia.topics()
-        self.assertEqual(result, [{'title':'الخوارزمي', 'url':'https://ar.wikipedia.org/?curid=1319'}])
+        payload = {'query': {'pages': [{'pageid':1319, 'ns':0, 'title':'الخوارزمي','extract':'عالم من العلماء، وله مؤلفات في الحساب والجبر والرياضيات والفلك وتاريخ العلم.'}, {'pageid':'bad', 'ns':0,'title':'fake','extract':'x'*50}]}}
+        with mock.patch('sanad.wikipedia.get_json', return_value=payload): result = wikipedia.topics()
+        self.assertEqual(result['topics'][0]['title'],'الخوارزمي')
+        self.assertEqual(result['topics'][0]['url'],'https://ar.wikipedia.org/?curid=1319')
+        self.assertEqual(len(result['topics']),1)
 
     def test_citations_preserve_the_origin_and_do_not_claim_reading(self):
         search = {'query': {'search': [{'pageid':1319, 'title':'الخوارزمي'}]}}

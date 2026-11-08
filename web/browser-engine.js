@@ -137,10 +137,31 @@ window.SANAD_BROWSER = true;
     return (d.query?.pages||[]).flatMap(p=>{const info=p.imageinfo?.[0]||{},url=info.descriptionurl||'';if(!url.startsWith('https://commons.wikimedia.org/'))return [];const lic=info.extmetadata?.LicenseShortName?.value||'غير معروف';return [{title:p.title||'',url,author:'',detail:`ترخيص مذكور في السجل: ${lic}؛ يلزم فحص صفحة الملف والحقوق.`,access:'سجل مادة مرئية — تحقق من الأصل والنسبة والترخيص'}];});
   }
   const wikiAPI = o => 'https://ar.wikipedia.org/w/api.php?' + params({...o,format:'json',formatversion:'2',origin:'*'});
-  async function topics() {
-    const d=await getJSON(wikiAPI({action:'query',list:'categorymembers',cmtitle:'تصنيف:تاريخ إسلامي',cmtype:'page',cmlimit:'24'}));
-    const topics=(d.query?.categorymembers||[]).filter(x=>Number.isSafeInteger(x.pageid)&&x.pageid>0&&typeof x.title==='string'&&x.title.trim()).map(x=>({title:x.title.slice(0,200),url:'https://ar.wikipedia.org/?curid='+x.pageid}));
-    return {topics,searched_at:new Date().toISOString()};
+  const topicCategories={travel:['الرحالة والطرق','تصنيف:رحالة مسلمون'],andalus:['الأندلس','تصنيف:تاريخ الأندلس'],battles:['المعارك والأحداث','تصنيف:معارك العرب'],maghreb:['المغرب','تصنيف:تاريخ المغرب'],islamic:['التاريخ الإسلامي','تصنيف:تاريخ إسلامي']};
+  async function topics(category='travel',query='',cursor='') {
+    if(typeof category!=='string'||!Object.hasOwn(topicCategories,category))throw Error('مسار الموضوعات غير صالح');
+    if(typeof query!=='string'||query.length>120||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(query))throw Error('عبارة البحث غير صالحة');query=query.trim().replace(/\s+/g,' ');if(query&&query.length<2)throw Error('أدخل حرفين على الأقل');
+    if(typeof cursor!=='string'||cursor.length>600)throw Error('مؤشر النتائج غير صالح');
+    const [label,cat]=topicCategories[category],p={action:'query',prop:'extracts|pageprops',exintro:'1',explaintext:'1',exsentences:'2',exlimit:'12',ppprop:'disambiguation'};
+    if(query){if(cursor&&(!/^[0-9]{1,3}$/.test(cursor)||Number(cursor)>200))throw Error('مؤشر البحث غير صالح');Object.assign(p,{generator:'search',gsrsearch:query,gsrnamespace:'0',gsrlimit:'12'});if(cursor)p.gsroffset=cursor}
+    else{if(cursor&&!/^page\|[0-9a-f]{1,550}\|[0-9]{1,13}$/.test(cursor))throw Error('مؤشر التصنيف غير صالح');Object.assign(p,{generator:'categorymembers',gcmtitle:cat,gcmtype:'page',gcmlimit:'12'});if(cursor){p.gcmcontinue=cursor;p.continue='gcmcontinue||'}}
+    const d=await wikiListJSON(wikiAPI(p));if(d?.error)throw Error('تعذر قراءة استجابة ويكيبيديا');const raw=d?.query?.pages||[];if(!Array.isArray(raw))throw Error('استجابة ويكيبيديا غير صالحة');const seen=new Set(),found=[];
+    for(const item of raw.slice(0,12)){const id=item?.pageid,title=item?.title,extract=item?.extract;if(!Number.isSafeInteger(id)||id<=0||id>=1e13||seen.has(id)||item.ns!==0||typeof title!=='string'||!title.trim()||title.length>200||typeof extract!=='string'||Object.hasOwn(item.pageprops||{},'disambiguation'))continue;
+      const t=title.trim().replace(/\s+/g,' '),text=extract.trim().replace(/\s+/g,' ');if(text.length<40||/^(?:قائمة|تصنيف|بوابة|[0-9٠-٩]{3,4}\s)/.test(t))continue;
+      seen.add(id);const score=['رحل','رسالة','مخطوط','معركة','حصار','تجارة','رحلة','مقاومة','هجرة','ترجم'].filter(x=>text.includes(x)).length;found.push({id:String(id),title:t,url:'https://ar.wikipedia.org/?curid='+id,extract:text.slice(0,350)+(text.length>350?'…':''),score,index:Number.isInteger(item.index)?item.index:9999});
+    }
+    const norm=s=>s.normalize('NFKD').toLowerCase().replace(/[\p{M}]/gu,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي'),terms=(norm(query).match(/[\p{L}\p{N}]+/gu)||[]).filter(t=>t.length>=3&&!['ابن','تاريخ','كتاب','على','إلى','الى'].includes(t)),hits=(text)=>terms.filter(t=>norm(text).includes(t)).length;
+    found.sort(query?(a,b)=>hits(b.title)-hits(a.title)||hits(b.extract)-hits(a.extract)||a.index-b.index:(a,b)=>b.score-a.score);for(const x of found){delete x.score;delete x.index}
+    let next=String((query?d?.continue?.gsroffset:d?.continue?.gcmcontinue)??'');if(query&&(!/^[0-9]{1,3}$/.test(next)||Number(next)>200))next='';if(!query&&!/^page\|[0-9a-f]{1,550}\|[0-9]{1,13}$/.test(next))next='';
+    return {topics:found,category,category_label:label,query,next_cursor:next,origin_url:'https://ar.wikipedia.org/wiki/'+encodeURIComponent(cat.replaceAll(' ','_')),searched_at:new Date().toISOString()};
+  }
+  async function topicSections(id){
+    if(typeof id!=='string'||!/^[1-9][0-9]{0,12}$/.test(id))throw Error('معرّف المقالة غير صالح');
+    const d=await wikiListJSON(wikiAPI({action:'parse',pageid:id,prop:'tocdata|revid'})),item=d?.parse;
+    if(!item||String(item.pageid)!==id||!Number.isSafeInteger(item.revid)||item.revid<=0)throw Error('تعذر قراءة فهرس المقالة');
+    const raw=item.tocdata?.sections||[];if(!Array.isArray(raw))throw Error('فهرس المقالة غير صالح');const seen=new Set(),sections=[];
+    for(const row of raw.slice(0,200)){if(!row||![1,2].includes(row.tocLevel)||typeof row.line!=='string')continue;const line=row.line.replace(/<[^>]*>/g,'').trim().replace(/\s+/g,' ');if(line.length<3||line.length>120||/[<>]/.test(line)||/المراجع|المصادر|الهوامش|وصلات خارجية|انظر أيضا|ملاحظات/.test(line)||seen.has(line))continue;seen.add(line);sections.push({title:line});if(sections.length>=16)break}
+    return {page_id:id,title:String(item.title||'').slice(0,200),revision_url:'https://ar.wikipedia.org/w/index.php?oldid='+item.revid,sections,warning:'عناوين أقسام ويكيبيديا تصلح لبناء سؤال، وليست حقائق مثبتة أو قائمة مصادر؛ راجع المصادر الأصلية.'};
   }
   async function openlibraryEditions(workId,offset=0){
     if(typeof workId!=='string'||!/^OL[0-9]{1,12}W$/.test(workId))throw Error('معرّف عمل Open Library غير صالح');
@@ -219,7 +240,7 @@ window.SANAD_BROWSER = true;
       if(r.body?.getReader){const reader=r.body.getReader();try{while(true){const v=await reader.read();if(v.done)break;size+=v.value.length;if(size>2000000){await reader.cancel();throw Error('استجابة الفهرس كبيرة جدًا')}chunks.push(v.value)}}finally{reader.releaseLock()}}
       else{const v=new Uint8Array(await r.arrayBuffer());size=v.length;if(size>2000000)throw Error('استجابة الفهرس كبيرة جدًا');chunks=[v]}
       const bytes=new Uint8Array(size);let at=0;for(const c of chunks){bytes.set(c,at);at+=c.length}return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
-    }catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال');if(e instanceof TypeError)throw Error('تعذر الاتصال بويكي مصدر');throw e}finally{clearTimeout(timer)}
+    }catch(e){if(e?.name==='AbortError')throw Error('انتهت مهلة الاتصال');if(e instanceof TypeError)throw Error('تعذر الاتصال بالخدمة أو حظر المتصفح الاستجابة');throw e}finally{clearTimeout(timer)}
   }
   async function wikisourceSubpages(id,lang,cursor=''){
     if(!['ar','en','fr','fa','tr'].includes(lang)||typeof id!=='string'||!/^[1-9][0-9]{0,12}$/.test(id))throw Error('معرّف صفحة أو لغة ويكي مصدر غير صالح');
@@ -506,7 +527,8 @@ window.SANAD_BROWSER = true;
       for(const p of data.projects){if(ids.has(p.id))throw Error('أحد المشاريع موجود مسبقًا؛ لم يُستبدل أي مشروع');ids.add(p.id)}
       writeProjects([...data.projects,...existing]);return {count:data.projects.length};
     }
-    if(path==='/api/topics')return topics();
+    if(path==='/api/topics')return topics(data.category??'travel',data.query??'',data.cursor??'');
+    if(path==='/api/topic-sections')return topicSections(data.page_id);
     if(path==='/api/qdl/search')return searchQdl(data.id,data.query);
     if(path==='/api/turath/search')return searchTurath(data.query);
     if(path==='/api/turath/read')return readTurath(data.book_id,data.page_id);

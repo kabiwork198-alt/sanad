@@ -3,6 +3,7 @@ import json
 import re
 import urllib.parse
 import urllib.request
+import unicodedata
 from html.parser import HTMLParser
 
 API = 'https://ar.wikipedia.org/w/api.php?'
@@ -19,14 +20,79 @@ def get_json(params):
     return json.loads(data)
 
 
-def topics():
-    data = get_json({'action':'query', 'list':'categorymembers', 'cmtitle':CATEGORY, 'cmtype':'page', 'cmlimit':'24'})
-    found = []
-    for item in data.get('query', {}).get('categorymembers', []):
-        ident, title = item.get('pageid'), item.get('title')
-        if isinstance(ident, int) and ident > 0 and isinstance(title, str) and title.strip():
-            found.append({'title': title[:200], 'url': f'https://ar.wikipedia.org/?curid={ident}'})
-    return found
+TOPIC_CATEGORIES = {
+    'travel': ('الرحالة والطرق', 'تصنيف:رحالة مسلمون'),
+    'andalus': ('الأندلس', 'تصنيف:تاريخ الأندلس'),
+    'battles': ('المعارك والأحداث', 'تصنيف:معارك العرب'),
+    'maghreb': ('المغرب', 'تصنيف:تاريخ المغرب'),
+    'islamic': ('التاريخ الإسلامي', 'تصنيف:تاريخ إسلامي'),
+}
+
+
+def topics(category='travel', query='', cursor=''):
+    if category not in TOPIC_CATEGORIES: raise ValueError('مسار الموضوعات غير صالح')
+    if not isinstance(query,str) or len(query)>120 or any(ord(c)<32 and c not in '\t\n\r' for c in query): raise ValueError('عبارة البحث غير صالحة')
+    query=' '.join(query.split())
+    if query and len(query)<2: raise ValueError('أدخل كلمتين أو حرفين على الأقل')
+    if not isinstance(cursor,str) or len(cursor)>600: raise ValueError('مؤشر النتائج غير صالح')
+    params={'action':'query','prop':'extracts|pageprops','exintro':'1','explaintext':'1','exsentences':'2','exlimit':'12','ppprop':'disambiguation'}
+    label,cat=TOPIC_CATEGORIES[category]
+    if query:
+        if cursor and (not re.fullmatch(r'[0-9]{1,3}',cursor) or int(cursor)>200): raise ValueError('مؤشر البحث غير صالح')
+        params.update({'generator':'search','gsrsearch':query,'gsrnamespace':'0','gsrlimit':'12'})
+        if cursor: params['gsroffset']=cursor
+    else:
+        if cursor and not re.fullmatch(r'page\|[0-9a-f]{1,550}\|[0-9]{1,13}',cursor): raise ValueError('مؤشر التصنيف غير صالح')
+        params.update({'generator':'categorymembers','gcmtitle':cat,'gcmtype':'page','gcmlimit':'12'})
+        if cursor: params.update({'gcmcontinue':cursor,'continue':'gcmcontinue||'})
+    data=get_json(params)
+    if not isinstance(data,dict) or data.get('error'): raise ValueError('تعذر قراءة استجابة ويكيبيديا')
+    raw=(data.get('query') or {}).get('pages',[])
+    if not isinstance(raw,list): raise ValueError('استجابة ويكيبيديا غير صالحة')
+    seen=set();found=[]
+    for item in raw[:12]:
+        if not isinstance(item,dict):continue
+        ident,title,extract=item.get('pageid'),item.get('title'),item.get('extract')
+        if not isinstance(ident,int) or isinstance(ident,bool) or not 0<ident<10**13 or ident in seen or item.get('ns')!=0 or not isinstance(title,str) or not title.strip() or len(title)>200 or not isinstance(extract,str): continue
+        if isinstance(item.get('pageprops'),dict) and 'disambiguation' in item['pageprops']: continue
+        title=' '.join(title.split()); extract=' '.join(extract.split())
+        if len(extract)<40 or re.match(r'^(?:قائمة|تصنيف|بوابة|[0-9٠-٩]{3,4}\s)',title):continue
+        seen.add(ident);score=sum(term in extract for term in ('رحل','رسالة','مخطوط','معركة','حصار','تجارة','رحلة','مقاومة','هجرة','ترجم'))
+        found.append({'id':str(ident),'title':title,'url':f'https://ar.wikipedia.org/?curid={ident}','extract':extract[:350]+('…' if len(extract)>350 else ''),'score':score,'index':item.get('index') if isinstance(item.get('index'),int) else 9999})
+    def norm(value):
+        value=unicodedata.normalize('NFKD',value).lower().translate(str.maketrans({'أ':'ا','إ':'ا','آ':'ا','ٱ':'ا','ى':'ي'}))
+        return ''.join(c for c in value if not unicodedata.combining(c))
+    terms=[t for t in re.findall(r'[^\W_]+',norm(query)) if len(t)>=3 and t not in ('ابن','تاريخ','كتاب','على','إلى','الى')]
+    found.sort(key=(lambda x:(-sum(t in norm(x['title']) for t in terms),-sum(t in norm(x['extract']) for t in terms),x['index'])) if query else (lambda x:-x['score']))
+    for row in found: row.pop('score');row.pop('index')
+    continuation=data.get('continue') if isinstance(data,dict) and isinstance(data.get('continue'),dict) else {}
+    nextval=continuation.get('gsroffset') if query else continuation.get('gcmcontinue')
+    nextval=str(nextval) if nextval is not None else ''
+    if query and (not re.fullmatch(r'[0-9]{1,3}',nextval or '') or int(nextval)>200):nextval=''
+    if not query and not re.fullmatch(r'page\|[0-9a-f]{1,550}\|[0-9]{1,13}',nextval or ''):nextval=''
+    return {'topics':found,'category':category,'category_label':label,'query':query,'next_cursor':nextval,
+            'origin_url':'https://ar.wikipedia.org/wiki/'+urllib.parse.quote(cat.replace(' ','_'))}
+
+
+def topic_sections(page_id):
+    if not isinstance(page_id,str) or not re.fullmatch(r'[1-9][0-9]{0,12}',page_id): raise ValueError('معرّف المقالة غير صالح')
+    data=get_json({'action':'parse','pageid':page_id,'prop':'tocdata|revid'})
+    item=data.get('parse') if isinstance(data,dict) else None
+    if not isinstance(item,dict) or str(item.get('pageid'))!=page_id or not isinstance(item.get('revid'),int) or isinstance(item.get('revid'),bool) or item['revid']<=0: raise ValueError('تعذر قراءة فهرس المقالة')
+    raw=item.get('tocdata',{}).get('sections',[]) if isinstance(item.get('tocdata'),dict) else []
+    if not isinstance(raw,list): raise ValueError('فهرس المقالة غير صالح')
+    sections=[];seen=set()
+    for row in raw[:200]:
+        if not isinstance(row,dict) or row.get('tocLevel') not in (1,2):continue
+        line=row.get('line')
+        if not isinstance(line,str):continue
+        line=' '.join(re.sub(r'<[^>]*>','',line).split())
+        if len(line)<3 or len(line)>120 or any(c in line for c in '<>') or re.search(r'المراجع|المصادر|الهوامش|وصلات خارجية|انظر أيضا|ملاحظات',line):continue
+        if line in seen:continue
+        seen.add(line);sections.append({'title':line})
+        if len(sections)>=16:break
+    return {'page_id':page_id,'title':str(item.get('title') or '')[:200],'revision_url':'https://ar.wikipedia.org/w/index.php?oldid='+str(item['revid']),
+            'sections':sections,'warning':'عناوين أقسام ويكيبيديا تصلح لبناء سؤال، وليست حقائق مثبتة أو قائمة مصادر؛ راجع المصادر الأصلية.'}
 
 
 class Citations(HTMLParser):

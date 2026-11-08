@@ -93,6 +93,11 @@ jobs:
           done
       - name: Test Persian and Turkish Wikisource discovery and page reading
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_regional.py
+      - name: Test grounded topic ideas in browser and local modes
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_topic_ideas.py
+      - name: Diagnose real topic ideas and texts in Chromium
+        continue-on-error: true
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_local_topic_ideas.py
       - name: Test Wikisource batch in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_batch.py
       - name: Diagnose real Arabic Wikisource batches in Chromium

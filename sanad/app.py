@@ -337,8 +337,12 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError('صيغة الطلب غير صحيحة')
             path = urllib.parse.urlsplit(self.path).path
-            if path == '/api/topics':
-                return self.send(200, {'topics': wikipedia.topics(), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
+            if path in ('/api/topic-sections', '/api/topics'):
+                try:
+                    if path == '/api/topic-sections': return self.send(200, wikipedia.topic_sections(body.get('page_id', '')))
+                    return self.send(200, {**wikipedia.topics(body.get('category', 'travel'), body.get('query', ''), body.get('cursor', '')), 'searched_at': datetime.now(timezone.utc).isoformat(timespec='seconds')})
+                except urllib.error.HTTPError as exc:
+                    return self.send(502, {'error': f'تعذر الوصول إلى ويكيبيديا (HTTP {exc.code}). حاول لاحقًا.'})
             if path == '/api/wikisource/subpages':
                 return self.send(200, catalogs.wikisource_subpages(body.get('page_id', ''), body.get('language', ''), body.get('cursor', '')))
             if path == '/api/wikisource/rendered':

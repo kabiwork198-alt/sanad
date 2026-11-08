@@ -33,7 +33,7 @@ const context = {
     if (url.startsWith('https://archive.org/')) return {ok:true,json:async()=>({response:{docs:[{identifier:'good-item',title:'Book in archive',creator:['Author'],year:2000},{identifier:'../bad',title:'Bad'}]}})};
     if (url.startsWith('https://ar.wikipedia.org/')) {
       const q=new URL(url).searchParams;
-      if(q.get('list')==='categorymembers')return {ok:true,json:async()=>({query:{categorymembers:[{pageid:1319,title:'الخوارزمي'}]}})};
+      if(q.get('generator')==='categorymembers'){const data=Buffer.from(JSON.stringify({query:{pages:[{pageid:1319,ns:0,title:'الخوارزمي',extract:'عالم من العلماء، وله مؤلفات في الحساب والجبر والرياضيات والفلك وتاريخ العلم.'}]}}));return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>Uint8Array.from(data).buffer}};
       if(q.get('list')==='search')return {ok:true,json:async()=>({query:{search:[{pageid:1319,title:'الخوارزمي'}]}})};
       if(q.get('action')==='parse')return {ok:true,json:async()=>({parse:{text:'<ol><li id="cite&#95;note-1"><span>عنوان المرجع <b>صفحة ١٠</b></span></li></ol>'}})};
     }

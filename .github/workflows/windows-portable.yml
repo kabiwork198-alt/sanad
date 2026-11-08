@@ -40,6 +40,8 @@ jobs:
         run: python -c "import runpy; runpy.run_path('tests/live_qdl.py')"
       - name: Diagnose multilingual Wikisource
         run: python -c "import runpy; runpy.run_path('tests/live_wikisource_multilingual.py')"
+      - name: Diagnose real Wikipedia topics and sections
+        run: python -c "import runpy; runpy.run_path('tests/live_topic_ideas.py')"
       - name: Diagnose real Arabic Wikisource batches
         run: python -c "import runpy; runpy.run_path('tests/live_wikisource_batch.py')"
       - name: Diagnose live OpenAlex open-copy lookup
@@ -93,6 +95,9 @@ jobs:
             Test-BundledUi 'tests/ui_pdf_security.cjs'
             Test-BundledUi 'tests/ui_history.cjs'
             Test-BundledUi 'tests/ui_open_access.cjs'
+            $env:SANAD_TEST_MOCK_TOPICS = '1'
+            Test-BundledUi 'tests/ui_topic_ideas.cjs'
+            Remove-Item Env:SANAD_TEST_MOCK_TOPICS
             $env:SANAD_TEST_MOCK_API = '1'
             Test-BundledUi 'tests/ui_wikisource_batch.cjs'
             Remove-Item Env:SANAD_TEST_MOCK_API
