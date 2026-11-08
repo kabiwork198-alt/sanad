@@ -222,7 +222,17 @@ jobs:
       - name: Test local multi-source comparison in browser
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_comparison.cjs
       - name: Test official Shamela UI with local Python backend
-        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_shamela.py
+        run: |
+          set +e
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_shamela.py > "$RUNNER_TEMP/shamela-ui-test.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/shamela-ui-test.log"
+          if [ "$status" -ne 0 ]; then
+            detail=$(tail -25 "$RUNNER_TEMP/shamela-ui-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+            echo "::error title=Shamela UI test failed::$detail"
+          fi
+          exit "$status"
       - name: Test multi-source comparison with local Python backend
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_backend.py
       - name: Check mobile browser against live public services

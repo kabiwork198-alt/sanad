@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [ui_local_hadith.py, ui_local_research_network.py]
+        test: [ui_local_hadith.py, ui_local_research_network.py, ui_local_shamela.py]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
