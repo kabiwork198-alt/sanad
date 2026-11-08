@@ -276,7 +276,7 @@ async function persistOcrProject(projectId){
  const project=current,revision=dirtyVersion,snapshot=JSON.parse(JSON.stringify(project));
  saveInFlight=true;$('#save').disabled=true;
  try{
-  await api('/api/save',{project:snapshot});
+  const saved=await api('/api/save',{project:snapshot});project._rev=saved.revision;
   if(current!==project)throw Error('تغير المشروع أثناء الحفظ');
   if(dirtyVersion===revision){dirty=false;$('#save-state').textContent='محفوظ';$('#save-state').dataset.dirty='false'}
  }finally{saveInFlight=false;$('#save').disabled=false}
@@ -455,7 +455,7 @@ async function save(){
  for(const c of current.claims){if(c.status==='مدعوم'&&(!c.location?.trim()||!current.sources.some(s=>s.id===c.sourceId)))return alertToast('الادعاء المدعوم يحتاج مصدرًا وموضعًا محددين')}
  const project=current,revision=dirtyVersion,snapshot=JSON.parse(JSON.stringify(project));saveInFlight=true;$('#save').disabled=true;$('#save').textContent='جارٍ الحفظ...';
  try{
-  await api('/api/save',{project:snapshot});
+  const saved=await api('/api/save',{project:snapshot});project._rev=saved.revision;
   if(current!==project){alertToast('حُفظ المشروع السابق محليًا');return}
   if(dirtyVersion===revision){dirty=false;render();alertToast('حُفظ المشروع محليًا')}
   else alertToast('حُفظت النسخة السابقة؛ توجد تغييرات أحدث تحتاج إلى حفظ');
@@ -463,6 +463,7 @@ async function save(){
 }
 function download(name,data){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 $('#new-project').onclick=$('#empty-new').onclick=makeProject;$('#save').onclick=save;
+$('#save-copy').onclick=async()=>{if(!current||saveInFlight||ocrBusy||sourceReadingTask)return alertToast('انتظر انتهاء المهمة أو الحفظ');if(!confirm('ستُنشأ نسخة مستقلة من المشروع المعروض بما فيه التعديلات غير المحفوظة؛ لن تُستبدل النسخة الأخرى. نتائج القراءة المؤقتة غير المضافة لا تدخل النسخة. هل تتابع؟'))return;const copy=JSON.parse(JSON.stringify(current));copy.id=uid();delete copy._rev;copy.title=(copy.title.slice(0,190)+' (نسخة)').slice(0,200);current=copy;projects.unshift(copy);dirty=true;dirtyVersion++;render();await save();if(current===copy&&!dirty){try{projects=(await api('/api/projects')).projects;current=projects.find(p=>p.id===copy.id)||copy;render()}catch{alertToast('حُفظت النسخة، لكن تعذر تحديث القائمة؛ أعد فتحها لاحقًا')}}};
 async function goHome(){await initialLoad;if(ocrBusy)return alertToast('أوقف مهمة OCR وانتظر حفظ ما اكتمل أولًا');if(saveInFlight){alertToast('انتظر انتهاء حفظ المشروع أولًا');return false}if(dirty&&!confirm('لديك تغييرات غير محفوظة. العودة للرئيسية دون حفظ؟'))return false;try{projects=(await api('/api/projects')).projects;current=null;dirty=false;view='home';render();showTopics();return true}catch(err){alertToast(err.message);return false}}
 $('#home').onclick=async()=>{if(await goHome())showView('home',true)};
 $('#open-guide').onclick=()=>{showView('guide',true);window.scrollTo(0,0)};
@@ -501,11 +502,11 @@ $('#home-topics').onclick=async e=>{
 $('#delete').onclick=async()=>{
  if(ocrBusy)return alertToast('أوقف مهمة OCR وانتظر حفظ ما اكتمل أولًا');if(saveInFlight)return alertToast('انتظر انتهاء حفظ المشروع أولًا');
  if(!current||!confirm('حذف هذا المشروع المحلي وتقدم OCR المرتبط به؟ قد تبقى الملفات المحفوظة محليًا؛ صدّر نسخة احتياطية أولًا إذا احتجتها.'))return;
- const id=current.id;try{
+ const id=current.id,revision=current._rev??null;try{
   let cleanupError=false;
-  const remove=async()=>{await api('/api/delete',{id});try{await SanadOcrJournal.remove(id)}catch{cleanupError=true}};
+  const remove=async()=>{await api('/api/delete',{id,revision});try{await SanadOcrJournal.remove(id)}catch{cleanupError=true}};
   if(navigator.locks?.request)await SanadOcrJournal.exclusive(id,remove);else await remove();
-  projects=projects.filter(p=>p.id!==id);current=null;dirty=false;render();
+  projects=projects.filter(p=>p.id!==id);if(current?.id===id){current=null;dirty=false}render();
   if(cleanupError)alertToast('حُذف المشروع لكن تعذر حذف تقدم OCR المحلي؛ قد تبقى بياناته في تخزين المتصفح');
  }catch(err){alertToast(err.message)}
 };
@@ -521,7 +522,7 @@ function backupReferences(items){
 }
 function backupProjectCopies(items){
  if(!Array.isArray(items)||!items.length||items.length>100)throw Error('النسخة تدعم من مشروع واحد إلى 100 مشروع');
- const copies=items.map(p=>({...p,id:uid()}));
+ const copies=items.map(p=>{const copy={...p,id:uid()};delete copy._rev;return copy});
  if(new TextEncoder().encode(JSON.stringify({projects:copies})).length>5*1024*1024)throw Error('بيانات المشاريع أكبر من 5 ميبيبايت؛ قسّمها قبل النقل');
  return copies;
 }

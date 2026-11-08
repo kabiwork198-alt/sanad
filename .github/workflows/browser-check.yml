@@ -107,6 +107,8 @@ jobs:
           done
       - name: Test Persian and Turkish Wikisource discovery and page reading
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_regional.py
+      - name: Test cross-tab save conflicts and copy recovery
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_project_conflict.py
       - name: Test saved source reading and resume with a simulated model
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_source_checkpoint.py
       - name: Test multi-part source reading and comparison with a simulated model

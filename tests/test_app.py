@@ -46,7 +46,7 @@ class SanadTest(unittest.TestCase):
 
     def test_save_and_read_unicode(self):
         p = project()
-        app.save_project(p)
+        p['_rev'] = app.save_project(p)
         self.assertEqual(app.all_projects()[0]['title'], 'اختبار')
         p['title'] = 'تعديل'
         app.save_project(p)

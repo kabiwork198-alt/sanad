@@ -45,6 +45,11 @@ TOKEN = secrets.token_urlsafe(32)
 MAX_BODY = 5 * 1024 * 1024
 COLLECTIONS = ('signals', 'sources', 'claims', 'scenes', 'events', 'evidence')
 
+class ProjectConflict(Exception):
+    pass
+
+CONFLICT_MESSAGE = 'تغير المشروع أو حُذف في نافذة أخرى؛ لم تُستبدل البيانات. احفظ عملك كنسخة، ثم أعد فتح المشروع.'
+
 
 def connect():
     DATA.mkdir(parents=True, exist_ok=True)
@@ -59,6 +64,9 @@ def validate_project(project):
     ident = project.get('id')
     if not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{32}', ident):
         raise ValueError('معرّف المشروع غير صحيح')
+    version = project.get('_rev')
+    if version is not None and (not isinstance(version, str) or not re.fullmatch(r'(?:legacy|[a-f0-9]{32})', version)):
+        raise ValueError('إصدار المشروع غير صالح')
     title = project.get('title')
     if not isinstance(title, str) or not title.strip() or len(title) > 200:
         raise ValueError('أدخل عنوانًا بين حرف و200 حرف')
@@ -109,33 +117,68 @@ def validate_project(project):
     return encoded
 
 
+def _revision(data):
+    value = json.loads(data)
+    return value.get('_rev', 'legacy')
+
+
 def save_project(project):
-    encoded = validate_project(project)
-    with closing(connect()) as db, db:
+    """Atomically compare the loaded revision before replacing project data."""
+    validate_project(project)
+    expected = project.get('_rev')
+    revision = secrets.token_hex(16)
+    saved = dict(project, _rev=revision)
+    encoded = validate_project(saved)
+    with closing(connect()) as db:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute('SELECT data FROM projects WHERE id=?', (project['id'],)).fetchone()
+        if (row and expected != _revision(row[0])) or (not row and expected is not None):
+            db.rollback()
+            raise ProjectConflict(CONFLICT_MESSAGE)
         db.execute('INSERT INTO projects (id,title,updated,data) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,updated=excluded.updated,data=excluded.data', (project['id'], project['title'].strip(), int(time.time()), encoded))
+        db.commit()
+    return revision
+
+
+def delete_project(ident, revision):
+    if not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{32}', ident):
+        raise ValueError('معرّف غير صالح')
+    with closing(connect()) as db:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute('SELECT data FROM projects WHERE id=?', (ident,)).fetchone()
+        if (row and revision != _revision(row[0])) or (not row and revision is not None):
+            db.rollback()
+            raise ProjectConflict(CONFLICT_MESSAGE)
+        if row:
+            db.execute('DELETE FROM projects WHERE id=?', (ident,))
+        db.commit()
 
 
 def all_projects():
     with closing(connect()) as db, db:
-        return [json.loads(row[0]) for row in db.execute('SELECT data FROM projects ORDER BY updated DESC, rowid DESC')]
+        projects = [json.loads(row[0]) for row in db.execute('SELECT data FROM projects ORDER BY updated DESC, rowid DESC')]
+        for project in projects:
+            project.setdefault('_rev', 'legacy')
+        return projects
 
 
 def import_projects(projects):
-    """Validate all projects first, then insert the copies in one transaction."""
+    """Validate every independent copy first, then insert atomically."""
     if not isinstance(projects, list) or not 1 <= len(projects) <= 100:
         raise ValueError('عدد المشاريع غير صالح')
-    encoded = [validate_project(project) for project in projects]
-    ids = [project['id'] for project in projects]
+    copies = [dict(project, _rev=secrets.token_hex(16)) if isinstance(project, dict) else project for project in projects]
+    encoded = [validate_project(project) for project in copies]
+    ids = [project['id'] for project in copies]
     if len(set(ids)) != len(ids):
         raise ValueError('معرّفات المشاريع مكررة')
     with closing(connect()) as db, db:
         try:
-            for project, data in zip(projects, encoded):
+            for project, data in zip(copies, encoded):
                 db.execute('INSERT INTO projects (id,title,updated,data) VALUES (?,?,?,?)',
                            (project['id'], project['title'].strip(), int(time.time()), data))
         except sqlite3.IntegrityError as exc:
             raise ValueError('أحد المشاريع موجود مسبقًا؛ لم يُستبدل أي مشروع') from exc
-    return {'count': len(projects)}
+    return {'count': len(copies)}
 
 
 def search_crossref(query):
@@ -399,14 +442,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/library/search':
                 return self.send(200, library.search_document(DATA, body.get('id', ''), body.get('query', ''), body.get('match_mode', 'basic')))
             if path == '/api/save':
-                save_project(body.get('project'))
-                return self.send(200, {'ok': True})
+                revision = save_project(body.get('project'))
+                return self.send(200, {'ok': True, 'revision': revision})
             if path == '/api/delete':
-                ident = body.get('id', '')
-                if not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{32}', ident):
-                    raise ValueError('معرّف غير صالح')
-                with closing(connect()) as db, db:
-                    db.execute('DELETE FROM projects WHERE id=?', (ident,))
+                delete_project(body.get('id', ''), body.get('revision'))
                 return self.send(200, {'ok': True})
             if path in ('/api/suggestions', '/api/analyze', '/api/draft', '/api/prepare-prompt'):
                 project = body.get('project')
@@ -441,6 +480,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError('استجابة النموذج غير صالحة')
                 return self.send(200, {'text': text[:30000]})
             self.send(404, {'error': 'غير موجود'})
+        except ProjectConflict as exc:
+            self.send(409, {'error': str(exc)})
         except (ValueError, json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
             self.send(400, {'error': str(exc) or 'بيانات غير صالحة'})
         except (BrokenPipeError, ConnectionResetError):

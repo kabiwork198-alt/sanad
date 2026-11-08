@@ -10,6 +10,7 @@ const context = {
     setItem: (k,v) => storage.set(k,v),
   },
   TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
+  navigator: {locks:{request:async (_name,fn)=>fn()}},
   crypto: require('node:crypto').webcrypto,
   DOMParser: class { parseFromString(text) { return {body:{textContent:text}}; } },
   fetch: async url => {
@@ -47,7 +48,7 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   const api = context.window.browserEngine;
   assert.equal(context.window.SANAD_BROWSER,true);
   const project = {id:'a'.repeat(32),title:'Test',sources:[{id:'b'.repeat(32),title:'Book'}],claims:[],signals:[],scenes:[],events:[]};
-  await api('/api/save',{project});
+  project._rev=(await api('/api/save',{project})).revision;
   assert.equal((await api('/api/projects')).projects.length,1);
   const proposal = await api('/api/suggestions',{project});
   assert.equal(proposal.suggestions.length,3);
@@ -59,7 +60,7 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   assert.match((await api('/api/draft',{project})).text,/Second source/);
   assert.match((await api('/api/draft',{project})).text,/يخالف/);
   assert.ok((await api('/api/analyze',{project})).issues.some(x=>x.includes('دليل مخالف')));
-  await api('/api/save',{project});
+  project._rev=(await api('/api/save',{project})).revision;
   assert.equal((await api('/api/projects')).projects[0].evidence[0].stance,'يخالف');
   project.evidence[0].sourceId='e'.repeat(32);
   await assert.rejects(()=>api('/api/save',{project}));
@@ -97,7 +98,14 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   assert.match(revision.warning,/ليس رقم صفحة/);
   await assert.rejects(()=>api('/api/wikisource/read',{page_id:'https://evil.test'}));
   await assert.rejects(()=>api('/api/lm',{prompt:'test'}));
-  await api('/api/delete',{id:project.id});
+  await api('/api/delete',{id:project.id,revision:project._rev});
   assert.equal((await api('/api/projects')).projects.length,0);
+  storage.set('sanad-projects-v1',JSON.stringify([{id:'f'.repeat(32),title:'قديم'}]));
+  const old=(await api('/api/projects')).projects[0];assert.equal(old._rev,'legacy');
+  const current={...old,title:'محدّث'};current._rev=(await api('/api/save',{project:current})).revision;
+  await assert.rejects(()=>api('/api/save',{project:{...old,title:'تعديل قديم'}}),/تغير المشروع/);
+  await assert.rejects(()=>api('/api/delete',{id:old.id,revision:old._rev}),/تغير المشروع/);
+  const contents=storage.get('sanad-projects-v1');context.navigator.locks=undefined;
+  await assert.rejects(()=>api('/api/save',{project:current}),/Web Locks/);assert.equal(storage.get('sanad-projects-v1'),contents);
   console.log('PASS: browser local storage, proposals, research failures, drafts and optional model boundary');
 })().catch(err => {console.error(err);process.exitCode=1});

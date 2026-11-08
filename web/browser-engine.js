@@ -22,16 +22,23 @@ window.SANAD_BROWSER = true;
     try {
       const value = JSON.parse(localStorage.getItem(KEY) || '[]');
       if (!Array.isArray(value)) throw Error();
-      return value;
+      return value.map(p=>({...p,_rev:p._rev??'legacy'}));
     } catch { throw Error('تعذر قراءة البيانات المحلية في هذا المتصفح. تأكد من السماح بتخزين الموقع.'); }
   }
   function writeProjects(value) {
     try { localStorage.setItem(KEY, JSON.stringify(value)); }
     catch { throw Error('تعذر الحفظ؛ قد تكون مساحة المتصفح ممتلئة أو التخزين معطّلًا.'); }
   }
+  const PROJECT_CONFLICT='تغير المشروع أو حُذف في نافذة أخرى؛ لم تُستبدل البيانات. احفظ عملك كنسخة، ثم أعد فتح المشروع.';
+  function newRevision(){return Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join('')}
+  function withProjectLock(fn){
+    if(!navigator.locks?.request)throw Error('حماية الحفظ المتزامن غير متاحة في هذا المتصفح؛ استخدم متصفحًا حديثًا يدعم Web Locks.');
+    return navigator.locks.request('sanad-project-store-v1',fn);
+  }
   function validate(p) {
     if (!p || typeof p !== 'object' || !/^[a-f0-9]{32}$/.test(p.id || '')) throw Error('صيغة المشروع غير صالحة');
     if (typeof p.title !== 'string' || !p.title.trim() || p.title.length > 200) throw Error('أدخل عنوانًا بين حرف و200 حرف');
+    if(p._rev!==undefined&&(typeof p._rev!=='string'||! /^(?:legacy|[a-f0-9]{32})$/.test(p._rev)))throw Error('إصدار المشروع غير صالح');
     for (const key of ['signals','sources','claims','scenes','events','evidence']) {
       if (p[key] !== undefined && (!Array.isArray(p[key]) || p[key].length > 500 || p[key].some(v => !v || typeof v !== 'object' || Array.isArray(v) || Object.values(v).some(x => typeof x !== 'string' || x.length > 250000)))) throw Error('قائمة غير صالحة: ' + key);
     }
@@ -529,13 +536,18 @@ window.SANAD_BROWSER = true;
   }
   window.browserEngine = async (path,data={}) => {
     if(path==='/api/projects')return {projects:projects()};
-    if(path==='/api/save'){validate(data.project);const items=projects().filter(x=>x.id!==data.project.id);items.unshift(data.project);writeProjects(items);return {ok:true};}
-    if(path==='/api/delete'){writeProjects(projects().filter(x=>x.id!==data.id));return {ok:true};}
+    if(path==='/api/save'){
+      validate(data.project);return withProjectLock(()=>{const items=projects(),existing=items.find(x=>x.id===data.project.id),expected=data.project._rev;
+       if((existing&&expected!==existing._rev)||(!existing&&expected!==undefined))throw Error(PROJECT_CONFLICT);
+       const revision=newRevision();writeProjects([{...data.project,_rev:revision},...items.filter(x=>x.id!==data.project.id)]);return {ok:true,revision}});
+    }
+    if(path==='/api/delete')return withProjectLock(()=>{if(typeof data.id!=='string'||!/^[a-f0-9]{32}$/.test(data.id))throw Error('معرّف غير صالح');const items=projects(),existing=items.find(x=>x.id===data.id),expected=data.revision??undefined;
+      if((existing&&expected!==existing._rev)||(!existing&&expected!==undefined))throw Error(PROJECT_CONFLICT);if(existing)writeProjects(items.filter(x=>x.id!==data.id));return {ok:true}});
     if(path==='/api/projects/import'){
       if(!Array.isArray(data.projects)||data.projects.length<1||data.projects.length>100)throw Error('عدد المشاريع غير صالح');
-      data.projects.forEach(validate);const existing=projects(),ids=new Set(existing.map(p=>p.id));
-      for(const p of data.projects){if(ids.has(p.id))throw Error('أحد المشاريع موجود مسبقًا؛ لم يُستبدل أي مشروع');ids.add(p.id)}
-      writeProjects([...data.projects,...existing]);return {count:data.projects.length};
+      data.projects.forEach(validate);return withProjectLock(()=>{const existing=projects(),ids=new Set(existing.map(p=>p.id));
+       for(const p of data.projects){if(ids.has(p.id))throw Error('أحد المشاريع موجود مسبقًا؛ لم يُستبدل أي مشروع');ids.add(p.id)}
+       writeProjects([...data.projects.map(p=>({...p,_rev:newRevision()})),...existing]);return {count:data.projects.length}});
     }
     if(path==='/api/pageviews'){
       const dates=SanadPageviews.range(data.start,data.end);

@@ -80,7 +80,7 @@ const site='https://kabiwork198-alt.github.io/sanad/';
  await d.waitForFunction(async()=>(await api('/api/projects')).projects.length===6,{timeout:15000});
  await d.waitForSelector('[data-project]');await d.click('[data-project]');await d.click('[data-tab="sources"]');await d.type('[data-local-query="0"]','بغداد');await d.click('[data-local-search="0"]');await d.waitForSelector('[data-match="0"]');
  // Missing attachments must block export rather than silently creating an incomplete backup.
- const missing=await d.evaluate(async()=>{current.sources[0].fileId='f'.repeat(64);await api('/api/save',{project:current});try{await createFullBackup();return false}catch(e){return e.message.includes('مفقود')}});
+ const missing=await d.evaluate(async()=>{current.sources[0].fileId='f'.repeat(64);current._rev=(await api('/api/save',{project:current})).revision;try{await createFullBackup();return false}catch(e){return e.message.includes('مفقود')}});
  if(!missing)throw Error('missing attachment did not block export');
  // Legacy backups stay importable, but contain no files.
  const legacy={format:'sanad-backup',version:1,projects:[{id:'c'.repeat(32),title:'قديم',sources:[],claims:[]}]};

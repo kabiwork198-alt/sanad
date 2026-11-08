@@ -49,10 +49,10 @@ const origin=process.env.SANAD_TEST_ORIGIN;if(!origin)throw Error('SANAD_TEST_OR
  if(staged.job.pendingFileId!==staged.file||staged.job.publishedFileId===staged.file)throw Error('publication intent not persisted before project save');
  await page.reload({waitUntil:'load'});await page.waitForSelector(`[data-project="${savedProject}"]`);await page.click(`[data-project="${savedProject}"]`);await page.click('[data-tab="sources"]');await page.waitForSelector('#ocr-resume');
  // A genuine unrelated source edit must not be silently overwritten by recovery.
- const unrelated=await page.evaluate(async()=>{const doc=(await api('/api/library/import',{name:'changed.txt',content:btoa('user changed this file')})).document;current.sources[1].fileId=doc.id;await api('/api/save',{project:current});return doc.id});
+ const unrelated=await page.evaluate(async()=>{const doc=(await api('/api/library/import',{name:'changed.txt',content:btoa('user changed this file')})).document;current.sources[1].fileId=doc.id;current._rev=(await api('/api/save',{project:current})).revision;return doc.id});
  await page.click('#ocr-resume');await page.waitForFunction(()=>!ocrBusy&&document.querySelector('#toast').textContent.includes('تغير ربط المصدر'),{timeout:90000});
  if(await page.evaluate(id=>current.sources[1].fileId!==id,unrelated))throw Error('recovery overwrote unrelated source edit');
- await page.evaluate(async id=>{current.sources[1].fileId=id;await api('/api/save',{project:current})},staged.file);
+ await page.evaluate(async id=>{current.sources[1].fileId=id;current._rev=(await api('/api/save',{project:current})).revision},staged.file);
  await page.waitForSelector('#ocr-resume');await page.click('#ocr-resume');
  await page.waitForFunction(()=>!ocrBusy&&current.sources[1]?.notes.includes('الصفحات المعالجة: 1, 2, 3'),{timeout:90000});
  if(await page.evaluate(id=>current.sources.length!==2||current.sources[1].id!==id||current.sources[1].notes.includes('نتيجة جزئية'),partialId))throw Error('resume duplicated or failed to complete source');
