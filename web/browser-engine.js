@@ -151,6 +151,7 @@ window.SANAD_BROWSER = true;
       seen.add(id);const score=['رحل','رسالة','مخطوط','معركة','حصار','تجارة','رحلة','مقاومة','هجرة','ترجم'].filter(x=>text.includes(x)).length;found.push({id:String(id),title:t,url:'https://ar.wikipedia.org/?curid='+id,extract:text.slice(0,350)+(text.length>350?'…':''),score,index:Number.isInteger(item.index)?item.index:9999});
     }
     const norm=s=>s.normalize('NFKD').toLowerCase().replace(/[\p{M}]/gu,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي'),terms=(norm(query).match(/[\p{L}\p{N}]+/gu)||[]).filter(t=>t.length>=3&&!['ابن','تاريخ','كتاب','على','إلى','الى'].includes(t)),hits=(text)=>terms.filter(t=>norm(text).includes(t)).length;
+    if(!['مسلسل','فيلم','روايه'].some(t=>norm(query).includes(t))){for(let i=found.length-1;i>=0;i--)if(/\((?:مسلسل|فيلم|رواية)(?:\s|\))/.test(found[i].title))found.splice(i,1)}
     if(terms.length){for(let i=found.length-1;i>=0;i--)if(!hits(found[i].title+' '+found[i].extract))found.splice(i,1)}
     found.sort(query?(a,b)=>hits(b.title)-hits(a.title)||hits(b.extract)-hits(a.extract)||a.index-b.index:(a,b)=>b.score-a.score);for(const x of found){delete x.score;delete x.index}
     let next=String((query?d?.continue?.gsroffset:d?.continue?.gcmcontinue)??'');if(query&&(!/^[0-9]{1,3}$/.test(next)||Number(next)>200))next='';if(!query&&!/^page\|[0-9a-f]{1,550}\|[0-9]{1,13}$/.test(next))next='';
