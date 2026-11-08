@@ -57,3 +57,5 @@ nav{background:#f0f4ec;border:1px solid #e2ebdf;border-radius:12px;padding:5px;g
 .research-heritage{display:flex;align-items:center;gap:8px;margin:14px 0 0;font-size:13px;font-weight:700;color:#40584c}.research-heritage input{width:auto;flex:0 0 auto;margin:0}
 
 .topic-controls{margin:18px 0 8px}.topic-controls .field{flex:1;min-width:200px}.topic-card p{font-size:13px;line-height:1.7;color:#4f6659;margin:10px 0}.topic-card>div:not(.topic-angles){display:flex;flex-wrap:wrap;align-items:center;gap:7px}.topic-angles{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.topic-angles button{font-size:12px;text-align:right}.topic-card{height:auto;align-self:start}
+
+.topic-choice{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;margin:3px}.topic-choice a{font-size:12px} .topic-angles{max-height:360px;overflow:auto;align-content:flex-start}

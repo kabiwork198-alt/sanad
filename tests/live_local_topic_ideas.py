@@ -15,6 +15,6 @@ with tempfile.TemporaryDirectory() as folder:
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
             env=os.environ.copy();env['SANAD_TEST_ORIGIN']=f'http://127.0.0.1:{server.server_port}/'
-            print('open-copy mode:',mode,flush=True)
+            print('live topic mode:',mode,flush=True)
             subprocess.run(['node','tests/probe_topic_ideas_browser.cjs'],env=env,cwd=root,check=True,timeout=90)
         finally:server.shutdown();server.server_close();thread.join()

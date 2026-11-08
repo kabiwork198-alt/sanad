@@ -13,7 +13,7 @@ class TopicIdeas(unittest.TestCase):
         with patch.object(wikipedia,'get_json',return_value=data) as mock:
             result=wikipedia.topics('travel');self.assertEqual(len(result['topics']),1);self.assertEqual(result['topics'][0]['id'],'1');self.assertEqual(result['next_cursor'],'page|d8a3|123')
             wikipedia.topics('travel','',result['next_cursor']);self.assertEqual(mock.call_args.args[0]['gcmcontinue'],'page|d8a3|123')
-        for args in [('evil','',''),('travel','x',''),('travel','','https://evil.test/'),('travel','abc','201')]:
+        for args in [([],'',''),({},'', ''),('evil','',''),('travel','x',''),('travel','','https://evil.test/'),('travel','abc','201')]:
             with self.assertRaises(ValueError): wikipedia.topics(*args)
         with patch.object(wikipedia,'get_json',return_value={'error':{'code':'ratelimited'}}):
             with self.assertRaises(ValueError):wikipedia.topics()
@@ -26,6 +26,21 @@ class TopicIdeas(unittest.TestCase):
             {'pageid':5,'ns':0,'title':'المحارب الثالث عشر','index':5,'extract':'المحارب الثالث عشر هو فيلم يتناول شخصية أحمد بن فضلان ورحلته.'}]}}
         with patch.object(wikipedia,'get_json',return_value=data): r=wikipedia.topics('travel','ابن فضلان')
         self.assertEqual([x['id'] for x in r['topics']],['2','3'])
+
+    def test_sections_keep_distinct_anchors_and_allow_research_on_sources(self):
+        rows=[{'tocLevel':1,'line':'مصادر الرحلة','number':'1','anchor':'مصادر_الرحلة'},
+              {'tocLevel':2,'line':'الخزر','number':'2.1','anchor':'الخزر'},
+              {'tocLevel':2,'line':'الخزر','number':'3.1','anchor':'الخزر_2'},
+              {'tocLevel':1,'line':'هوامش','anchor':'هوامش'},
+              {'tocLevel':1,'line':'المراجع','anchor':'المراجع'},
+              {'tocLevel':1,'line':'عنوان آخر','anchor':'bad\nanchor'}]
+        with patch.object(wikipedia,'get_json',return_value={'parse':{'pageid':1,'revid':456,'tocdata':{'sections':rows}}}):
+            sections=wikipedia.topic_sections('1')['sections']
+        self.assertEqual([x['title'] for x in sections],['مصادر الرحلة','الخزر','الخزر','عنوان آخر'])
+        self.assertEqual([x['number'] for x in sections[:3]],['1','2.1','3.1'])
+        self.assertIn('#%D9%85',sections[0]['url'])
+        self.assertTrue(sections[2]['url'].endswith('_2'))
+        self.assertFalse(sections[3]['url'])
 
     def test_sections_are_from_matching_real_revision(self):
         payload={'parse':{'pageid':1,'title':'A','revid':123,'tocdata':{'sections':[{'tocLevel':1,'line':'الرحلة الأولى'},{'tocLevel':2,'line':'<b>المسار</b>'},{'tocLevel':1,'line':'المراجع'},{'tocLevel':1,'line':'الرحلة الأولى'}]}}}

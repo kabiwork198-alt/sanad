@@ -34,6 +34,7 @@ const context = {
     if (url.startsWith('https://ar.wikipedia.org/')) {
       const q=new URL(url).searchParams;
       if(q.get('generator')==='categorymembers'){const data=Buffer.from(JSON.stringify({query:{pages:[{pageid:1319,ns:0,title:'الخوارزمي',extract:'عالم من العلماء، وله مؤلفات في الحساب والجبر والرياضيات والفلك وتاريخ العلم.'}]}}));return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>Uint8Array.from(data).buffer}};
+      if(q.get('prop')==='tocdata|revid'){const rows=[{tocLevel:1,line:'مصادر الرحلة',number:'1',anchor:'مصادر_الرحلة'},{tocLevel:2,line:'الخزر',number:'2.1',anchor:'الخزر'},{tocLevel:2,line:'الخزر',number:'3.1',anchor:'الخزر_2'},{tocLevel:1,line:'هوامش',anchor:'هوامش'},{tocLevel:1,line:'المراجع',anchor:'المراجع'},{tocLevel:1,line:'عنوان آخر',anchor:'bad\nanchor'}],data=Buffer.from(JSON.stringify({parse:{pageid:1319,revid:456,tocdata:{sections:rows}}}));return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>Uint8Array.from(data).buffer}};
       if(q.get('list')==='search')return {ok:true,json:async()=>({query:{search:[{pageid:1319,title:'الخوارزمي'}]}})};
       if(q.get('action')==='parse')return {ok:true,json:async()=>({parse:{text:'<ol><li id="cite&#95;note-1"><span>عنوان المرجع <b>صفحة ١٠</b></span></li></ol>'}})};
     }
@@ -65,6 +66,8 @@ vm.runInContext(fs.readFileSync('web/browser-engine.js','utf8'),context);
   project.evidence[0].sourceId='d'.repeat(32);
   const topics=await api('/api/topics',{});
   assert.equal(topics.topics[0].title,'الخوارزمي');
+  await assert.rejects(()=>api('/api/topics',{category:[]}));
+  const sections=await api('/api/topic-sections',{page_id:'1319'});assert.deepEqual(Array.from(sections.sections,x=>x.title),['مصادر الرحلة','الخزر','الخزر','عنوان آخر']);assert.deepEqual(Array.from(sections.sections.slice(0,3),x=>x.number),['1','2.1','3.1']);assert.match(sections.sections[0].url,/#%D9%85/);assert.match(sections.sections[2].url,/_2$/);assert.equal(sections.sections[3].url,'');
   const result=await api('/api/research',{query:'History'});
   assert.equal(result.results.length,10);
   assert.match(foundMali().detail,/مخطوطات مالي/);

@@ -8,7 +8,11 @@ from sanad import app
 root=Path(__file__).resolve().parents[1]
 extract='أحمد بن فضلان رحالة عباسي كتب رسالة عن الرحلة ووصف المناطق والشعوب التي زارها.'
 def get_json(params):
-    if params.get('action')=='parse':return {'parse':{'pageid':129569,'title':'أحمد بن فضلان','revid':76515169,'tocdata':{'sections':[{'tocLevel':1,'line':'رحلة ابن فضلان'},{'tocLevel':2,'line':'اكتشاف مخطوطة مشهد'},{'tocLevel':1,'line':'المراجع'}]}}}
+    if params.get('action')=='parse':return {'parse':{'pageid':129569,'title':'أحمد بن فضلان','revid':76515169,'tocdata':{'sections':[{'tocLevel':1,'line':'رحلة ابن فضلان','number':'1','anchor':'رحلة_ابن_فضلان'},{'tocLevel':2,'line':'اكتشاف مخطوطة مشهد','number':'1.1','anchor':'اكتشاف_مخطوطة_مشهد'},{'tocLevel':1,'line':'المراجع'}]}}}
+    if params.get('gsroffset')=='48':
+        raise OSError('simulated upstream failure')
+    if params.get('gsroffset')=='24':
+        return {'continue':{'gsroffset':48},'query':{'pages':[{'pageid':129569,'ns':0,'title':'أحمد بن فضلان','index':1,'extract':extract},{'pageid':222,'ns':0,'title':'رحلة ابن فضلان','index':2,'extract':extract}]}}
     return {'continue':{'gsroffset':24},'query':{'pages':[{'pageid':129569,'ns':0,'title':'أحمد بن فضلان','index':1,'extract':extract},{'pageid':1,'ns':0,'title':'قائمة الرحلات','extract':extract}]}}
 class Quiet(SimpleHTTPRequestHandler):
     def log_message(self,*args):pass

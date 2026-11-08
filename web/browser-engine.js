@@ -161,9 +161,17 @@ window.SANAD_BROWSER = true;
     if(typeof id!=='string'||!/^[1-9][0-9]{0,12}$/.test(id))throw Error('معرّف المقالة غير صالح');
     const d=await wikiListJSON(wikiAPI({action:'parse',pageid:id,prop:'tocdata|revid'})),item=d?.parse;
     if(!item||String(item.pageid)!==id||!Number.isSafeInteger(item.revid)||item.revid<=0)throw Error('تعذر قراءة فهرس المقالة');
-    const raw=item.tocdata?.sections||[];if(!Array.isArray(raw))throw Error('فهرس المقالة غير صالح');const seen=new Set(),sections=[];
-    for(const row of raw.slice(0,200)){if(!row||![1,2].includes(row.tocLevel)||typeof row.line!=='string')continue;const line=row.line.replace(/<[^>]*>/g,'').trim().replace(/\s+/g,' ');if(line.length<3||line.length>120||/[<>]/.test(line)||/المراجع|المصادر|الهوامش|وصلات خارجية|انظر أيضا|ملاحظات/.test(line)||seen.has(line))continue;seen.add(line);sections.push({title:line});if(sections.length>=16)break}
-    return {page_id:id,title:String(item.title||'').slice(0,200),revision_url:'https://ar.wikipedia.org/w/index.php?oldid='+item.revid,sections,warning:'عناوين أقسام ويكيبيديا تصلح لبناء سؤال، وليست حقائق مثبتة أو قائمة مصادر؛ راجع المصادر الأصلية.'};
+    const raw=item.tocdata?.sections||[];if(!Array.isArray(raw))throw Error('فهرس المقالة غير صالح');const seen=new Set(),sections=[],revision_url='https://ar.wikipedia.org/w/index.php?oldid='+item.revid;
+    for(const row of raw.slice(0,200)){
+      if(!row||![1,2].includes(row.tocLevel)||typeof row.line!=='string')continue;
+      const line=row.line.replace(/<[^>]*>/g,'').trim().replace(/\s+/g,' ');
+      if(line.length<3||line.length>120||/[<>]/.test(line)||/^(?:المراجع|المصادر|الهوامش|هوامش|وصلات خارجية|انظر أيض[اًا]|ملاحظات|فهرس المراجع|المعلومات الكاملة للمراجع)(?:\s|$)/.test(line))continue;
+      let url='';if(typeof row.anchor==='string'&&row.anchor.length>0&&row.anchor.length<=300&&!/[\x00-\x1f\x7f]/.test(row.anchor)){try{url=revision_url+'#'+encodeURIComponent(row.anchor).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase())}catch{}}
+      const key=url||line;if(seen.has(key))continue;seen.add(key);
+      const number=typeof row.number==='string'&&/^[0-9]{1,3}(?:\.[0-9]{1,3}){0,3}$/.test(row.number)?row.number:'';
+      sections.push({title:line,number,url});if(sections.length>=40)break;
+    }
+    return {page_id:id,title:String(item.title||'').slice(0,200),revision_url,sections,retrieved_at:new Date().toISOString(),warning:'حتى 40 عنوانًا مناسبًا من أول 200 قسم في المستويين الأولين؛ قد تُستبعد أقسام أخرى. العناوين إرشادية وليست حقائق مثبتة أو قائمة مصادر؛ راجع المصادر الأصلية.'};
   }
   async function openlibraryEditions(workId,offset=0){
     if(typeof workId!=='string'||!/^OL[0-9]{1,12}W$/.test(workId))throw Error('معرّف عمل Open Library غير صالح');

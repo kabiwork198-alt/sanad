@@ -30,7 +30,7 @@ TOPIC_CATEGORIES = {
 
 
 def topics(category='travel', query='', cursor=''):
-    if category not in TOPIC_CATEGORIES: raise ValueError('مسار الموضوعات غير صالح')
+    if not isinstance(category,str) or category not in TOPIC_CATEGORIES: raise ValueError('مسار الموضوعات غير صالح')
     if not isinstance(query,str) or len(query)>120 or any(ord(c)<32 and c not in '\t\n\r' for c in query): raise ValueError('عبارة البحث غير صالحة')
     query=' '.join(query.split())
     if query and len(query)<2: raise ValueError('أدخل كلمتين أو حرفين على الأقل')
@@ -84,18 +84,27 @@ def topic_sections(page_id):
     if not isinstance(item,dict) or str(item.get('pageid'))!=page_id or not isinstance(item.get('revid'),int) or isinstance(item.get('revid'),bool) or item['revid']<=0: raise ValueError('تعذر قراءة فهرس المقالة')
     raw=item.get('tocdata',{}).get('sections',[]) if isinstance(item.get('tocdata'),dict) else []
     if not isinstance(raw,list): raise ValueError('فهرس المقالة غير صالح')
+    revision_url='https://ar.wikipedia.org/w/index.php?oldid='+str(item['revid'])
     sections=[];seen=set()
     for row in raw[:200]:
         if not isinstance(row,dict) or row.get('tocLevel') not in (1,2):continue
         line=row.get('line')
         if not isinstance(line,str):continue
         line=' '.join(re.sub(r'<[^>]*>','',line).split())
-        if len(line)<3 or len(line)>120 or any(c in line for c in '<>') or re.search(r'المراجع|المصادر|الهوامش|وصلات خارجية|انظر أيضا|ملاحظات',line):continue
-        if line in seen:continue
-        seen.add(line);sections.append({'title':line})
-        if len(sections)>=16:break
-    return {'page_id':page_id,'title':str(item.get('title') or '')[:200],'revision_url':'https://ar.wikipedia.org/w/index.php?oldid='+str(item['revid']),
-            'sections':sections,'warning':'عناوين أقسام ويكيبيديا تصلح لبناء سؤال، وليست حقائق مثبتة أو قائمة مصادر؛ راجع المصادر الأصلية.'}
+        if len(line)<3 or len(line)>120 or any(c in line for c in '<>') or re.search(r'^(?:المراجع|المصادر|الهوامش|هوامش|وصلات خارجية|انظر أيض[اًا]|ملاحظات|فهرس المراجع|المعلومات الكاملة للمراجع)(?:\s|$)',line):continue
+        anchor=row.get('anchor'); url=''
+        if isinstance(anchor,str) and 0<len(anchor)<=300 and not re.search(r'[\x00-\x1f\x7f]',anchor):
+            try: url=revision_url+'#'+urllib.parse.quote(anchor,safe='')
+            except UnicodeEncodeError: pass
+        key=url or line
+        if key in seen:continue
+        seen.add(key)
+        number=row.get('number')
+        number=number if isinstance(number,str) and re.fullmatch(r'[0-9]{1,3}(?:\.[0-9]{1,3}){0,3}',number) else ''
+        sections.append({'title':line,'number':number,'url':url})
+        if len(sections)>=40:break
+    return {'page_id':page_id,'title':str(item.get('title') or '')[:200],'revision_url':revision_url,
+            'sections':sections,'warning':'حتى 40 عنوانًا مناسبًا من أول 200 قسم في المستويين الأولين؛ قد تُستبعد أقسام أخرى. العناوين إرشادية وليست حقائق مثبتة أو قائمة مصادر؛ راجع المصادر الأصلية.'}
 
 
 class Citations(HTMLParser):
