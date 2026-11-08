@@ -56,7 +56,17 @@ jobs:
       - name: Test attributed passage alignment in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_text_alignment.py
       - name: Test one-record hadith lookup in browser and local modes
-        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_hadith.py
+        run: |
+          set +e
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_hadith.py > "$RUNNER_TEMP/hadith-ui-test.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/hadith-ui-test.log"
+          if [ "$status" -ne 0 ]; then
+            detail=$(tail -20 "$RUNNER_TEMP/hadith-ui-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+            echo "::error title=Hadith UI test failed::$detail"
+          fi
+          exit "$status"
       - name: Diagnose live Hadith API in Chromium (availability is not guaranteed)
         continue-on-error: true
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/live_local_hadith.py
