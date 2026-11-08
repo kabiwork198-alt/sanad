@@ -79,9 +79,18 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_history.py
       - name: Test unified heritage search, consent and retries in both modes
         run: |
-          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_heritage_research.py
-          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_heritage_real.py
-          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_heritage_browser.py
+          for test in tests/ui_local_heritage_research.py tests/ui_local_heritage_real.py tests/ui_local_heritage_browser.py; do
+            set +e
+            NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python "$test" > "$RUNNER_TEMP/heritage-test.log" 2>&1
+            status=$?
+            set -e
+            cat "$RUNNER_TEMP/heritage-test.log"
+            if [ "$status" -ne 0 ]; then
+              detail=$(tail -15 "$RUNNER_TEMP/heritage-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+              echo "::error title=Heritage UI failed: $test::$detail"
+              exit "$status"
+            fi
+          done
       - name: Test Persian and Turkish Wikisource discovery and page reading
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_regional.py
       - name: Test open-copy lookup in both modes
@@ -130,7 +139,16 @@ jobs:
       - name: Diagnose Turath MCP real browser initialization
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/probe_turath_browser.cjs
       - name: Test OpenITI corpus local install, search and save UI
-        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_openiti_corpus.py
+        run: |
+          set +e
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_openiti_corpus.py > "$RUNNER_TEMP/corpus-ui-test.log" 2>&1
+          status=$?
+          cat "$RUNNER_TEMP/corpus-ui-test.log"
+          if [ "$status" -ne 0 ]; then
+            detail=$(tail -15 "$RUNNER_TEMP/corpus-ui-test.log" | tr '\n' ' ' | sed 's/%/%25/g')
+            echo "::error title=OpenITI corpus UI failed::$detail"
+          fi
+          exit "$status"
       - name: Diagnose searching real texts from the OpenITI primary ZIP
         run: python tests/live_openiti_corpus.py
       - name: Diagnose official OpenITI release ZIP directory
