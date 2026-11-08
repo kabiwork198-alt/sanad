@@ -164,7 +164,7 @@ def read_wikisource(page_id):
 
 def wikisource_other(query, language):
     """Search fixed Wikisource language editions; records are not yet texts."""
-    labels = {'en':'الإنجليزية', 'fr':'الفرنسية'}
+    labels = {'en':'الإنجليزية', 'fr':'الفرنسية', 'fa':'الفارسية', 'tr':'التركية'}
     if language not in labels: raise ValueError('لغة ويكي مصدر غير مدعومة')
     data = get_json('https://' + language + '.wikisource.org/w/api.php', {'action':'query','list':'search','srsearch':query,'srnamespace':'0','srlimit':'10','format':'json','formatversion':'2'})
     items = []
@@ -180,7 +180,7 @@ def wikisource_other(query, language):
 def read_wikisource_rendered(page_id, language):
     """Extract bounded plain text from one rendered Wikisource page, never execute HTML."""
     from html.parser import HTMLParser
-    if language not in ('ar', 'en', 'fr'): raise ValueError('لغة ويكي مصدر غير مدعومة')
+    if language not in ('ar', 'en', 'fr', 'fa', 'tr'): raise ValueError('لغة ويكي مصدر غير مدعومة')
     if not isinstance(page_id, str) or not re.fullmatch(r'[1-9][0-9]{0,12}', page_id):
         raise ValueError('معرّف صفحة ويكي مصدر غير صالح')
     data = get_json('https://' + language + '.wikisource.org/w/api.php', {'action':'parse','pageid':page_id,'prop':'text|revid','format':'json','formatversion':'2'})

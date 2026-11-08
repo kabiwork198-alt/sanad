@@ -1,7 +1,7 @@
 /* Deterministic research planning and bounded aggregation; no model or network by itself. */
 'use strict';
 (function(root){
- const baseline=[['Crossref','crossref'],['Open Library','openlibrary'],['Wikimedia Commons','commons'],['إحالات ويكيبيديا العربية','wikipedia'],['ويكي مصدر العربية','wikisource-ar'],['ويكي مصدر الإنجليزية','wikisource-en'],['ويكي مصدر الفرنسية','wikisource-fr'],['Internet Archive','archive'],['DOAJ','doaj'],['OpenAlex','openalex'],['المكتبة الرقمية العالمية','loc'],['صحف Chronicling America','loc'],['مخطوطات مالي الإسلامية','loc']];
+ const baseline=[['Crossref','crossref'],['Open Library','openlibrary'],['Wikimedia Commons','commons'],['إحالات ويكيبيديا العربية','wikipedia'],['ويكي مصدر العربية','wikisource-ar'],['ويكي مصدر الإنجليزية','wikisource-en'],['ويكي مصدر الفرنسية','wikisource-fr'],['ويكي مصدر الفارسية','wikisource-fa'],['ويكي مصدر التركية','wikisource-tr'],['Internet Archive','archive'],['DOAJ','doaj'],['OpenAlex','openalex'],['المكتبة الرقمية العالمية','loc'],['صحف Chronicling America','loc'],['مخطوطات مالي الإسلامية','loc']];
  const dimensions=[
   ['timeline','التسلسل الزمني','early','البدايات','البدايات','early life'],
   ['timeline','التسلسل الزمني','rise','الصعود والتطور','الصعود','rise'],
@@ -15,15 +15,22 @@
   ['sources','المصادر والتحقق','manuscripts','المخطوطات','المخطوطات','manuscripts'],
   ['sources','المصادر والتحقق','studies','الدراسات العلمية','الدراسات','academic studies']
  ];
- function plan(topic,local){
+ function plan(topic,local,heritage=false){
   if(typeof topic!=='string')throw Error('أدخل موضوع البحث');topic=topic.trim().replace(/\s+/g,' ');
   if(!topic||topic.length>240)throw Error('أدخل موضوعًا من حرف إلى 240 حرفًا');
+  if(heritage&&(topic.length<2||(local&&topic.length>200)))throw Error(local?'المصادر التراثية تحتاج عبارة من حرفين إلى 200 حرف؛ أو ألغِ اختيارها':'المصادر التراثية تحتاج عبارة من حرفين على الأقل؛ أو ألغِ اختيارها');
   const arabic=/[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/.test(topic),wiki=arabic?['ويكي مصدر العربية','wikisource-ar']:['ويكي مصدر الإنجليزية','wikisource-en'];
   const queries=[{id:'base',dimension:'base',axis:'الموضوع الأساسي',label:'العبارة الأصلية',query:topic},...dimensions.map(([dimension,axis,id,label,ar,en])=>({id,dimension,axis,label,query:topic+' '+(arabic?ar:en)}))];
   const jobs=[];
   const add=(q,[provider,group])=>jobs.push({id:q.id+'|'+provider,query_id:q.id,dimension:q.dimension,axis:q.axis,label:q.label,query:q.query,provider,group});
   const initial=local?[...baseline,['الأرشيف الوطني البريطاني (Windows)','nationalarchives']]:baseline;
   for(const p of initial)add(queries[0],p);
+  // These are separately consented, bounded existing connectors, not bulk downloads.
+  if(heritage){
+   add(queries[0],['فهرس OpenITI','openiti']);
+   add(queries[0],['تراث','turath']);
+   if(local){add(queries[0],['الشاملة الرسمية (Windows)','shamela']);add(queries[0],['أرشيف الإسكندرية (Windows)','alexandria'])}
+  }
   for(const q of queries.slice(1)){
    // Deliberately bounded: focused catalog searches, not every query against every service.
    for(const p of [baseline[0],baseline[1],wiki])add(q,p);
@@ -67,7 +74,7 @@
    const existing=key?byUrl.get(key):null;
    if(existing)existing.appearances.push(appearance);else{const result={...item,provider:run.provider,appearances:[appearance]};results.push(result);if(key)byUrl.set(key,result)}
   }}
-  const providers=ordered.filter(r=>r.query_id==='base').map(r=>({provider:r.provider,status:r.status,count:r.count,reason:r.reason,checked_at:r.checked_at||''}));
+  const providers=ordered.filter(r=>r.query_id==='base').map(r=>({provider:r.provider,status:r.status,count:r.count,reason:r.reason,truncated:!!r.truncated,checked_at:r.checked_at||''}));
   return {query:plan.topic,searched_at:startedAt,plan,runs:ordered,providers,results,warning:'نتائج البحث سجلات محتملة وليست نصوصًا مقروءة أو تحققًا من الوقائع أو الحقوق. العبارات قالبية ولا تضمن الشمول؛ افحص كل مصدر وموضع.'};
  }
  function brief(report){

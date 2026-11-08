@@ -75,6 +75,13 @@ jobs:
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_ocr_batch.py
       - name: Test Hijri estimates, local name variants and printed citations in both modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_history.py
+      - name: Test unified heritage search, consent and retries in both modes
+        run: |
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_heritage_research.py
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_heritage_real.py
+          NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_heritage_browser.py
+      - name: Test Persian and Turkish Wikisource discovery and page reading
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_wikisource_regional.py
       - name: Test multi-query research UI in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_research_expanded.py
       - name: Test real local research HTTP API with mocked providers

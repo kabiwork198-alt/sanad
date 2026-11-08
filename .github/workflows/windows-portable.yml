@@ -89,6 +89,7 @@ jobs:
             Test-BundledUi 'tests/ui_pdf_security.cjs'
             Test-BundledUi 'tests/ui_history.cjs'
             Test-BundledUi 'tests/ui_research_expanded.cjs'
+            Test-BundledUi 'tests/ui_heritage_research.cjs'
             Test-BundledUi 'tests/ui_ocr_batch.cjs'
             Test-BundledUi 'tests/ui_mineru.cjs'
             Test-BundledUi 'tests/ui_ocr.cjs'

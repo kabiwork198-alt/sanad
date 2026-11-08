@@ -4,6 +4,7 @@ const puppeteer=require('puppeteer-core');const origin=process.env.SANAD_TEST_OR
  browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});const page=await browser.newPage(),errors=[];let consent=true,dialogs=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.message());return consent?d.accept(d.type()==='prompt'?'ابن خلدون':undefined):d.dismiss()});
  await page.goto(origin,{waitUntil:'load'});await page.click('#empty-new');await page.click('[data-tab="research"]');
+ await page.click('#research-heritage'); // Legacy baseline remains independently selectable.
  await page.evaluate(()=>{window.originalResearchApi=api;window.stats={requests:[],active:0,max:0,activeProviders:{},crossref:0,early:0,lm:0};api=async(path,data)=>{
   if(path==='/api/lm'){stats.lm++;throw Error('model must not be invoked')}
   if(path!=='/api/research')return originalResearchApi(path,data);
@@ -15,7 +16,7 @@ const puppeteer=require('puppeteer-core');const origin=process.env.SANAD_TEST_OR
  consent=false;await page.click('#research-search');if((await page.evaluate(()=>stats.requests.length))!==0)throw Error('sent queries before consent');consent=true;
  await page.click('#research-search');await page.waitForFunction(()=>researchResult?.plan&&researchTask===null,{timeout:45000});
  const result=await page.evaluate(()=>({query:researchResult.query,runs:researchResult.runs,results:researchResult.results,stats}));
- if(result.runs.length!==(await page.evaluate(()=>window.SANAD_BROWSER?48:49)))throw Error('incorrect number of planned attempts');
+ if(result.runs.length!==(await page.evaluate(()=>window.SANAD_BROWSER?50:51)))throw Error('incorrect number of planned attempts');
  if(result.stats.max>4||result.stats.max<2||result.stats.requests.filter(x=>x.provider==='Crossref').length!==1)throw Error('concurrency or 429 throttling wrong '+JSON.stringify(result.stats));
  if(result.results.length!==1||result.results[0].appearances.length<10)throw Error('deduplication lost provenance');
  for(const dimension of ['timeline','geography','people','sources'])if(!result.runs.some(x=>x.dimension===dimension))throw Error('missing dimension '+dimension);

@@ -11,6 +11,10 @@ const report=s=>console.log('::notice file=tests/probe_wikisource_multilingual.c
   const result=await page.evaluate(async({lang,id,needle,query,provider})=>{try{const r=await api('/api/research',{query,provider}),page=await api('/api/wikisource/rendered',{page_id:id,language:lang});return {state:r.providers[0].status,results:r.results.length,revision:page.revision_id,characters:page.text.length,phrase:page.text.includes(needle),warning:page.warning.includes('قد يتغير المحتوى')}}catch(e){return {error:String(e.message)}}},{lang,id,needle,query,provider});
   report('Wikisource '+lang+' live browser: '+JSON.stringify(result));
  }
+ for(const [lang,query,provider] of [['fa','تاریخ','ويكي مصدر الفارسية'],['tr','Tarih','ويكي مصدر التركية']]){
+  const result=await page.evaluate(async({lang,query,provider})=>{try{const r=await api('/api/research',{query,provider});if(!r.results.length)return {state:r.providers[0].status,results:0,reason:r.providers[0].reason};const id=new URL(r.results[0].url).searchParams.get('curid');const item=await api('/api/wikisource/rendered',{page_id:id,language:lang});return {state:r.providers[0].status,results:r.results.length,revision:item.revision_id,characters:item.text.length}}catch(e){return {error:String(e.message)}}},{lang,query,provider});
+  report('Wikisource '+lang+' live browser: '+JSON.stringify(result));
+ }
  // Exercise actual UI, consent, local file import and search with the French chapter.
  try{
   await page.click('#empty-new');await page.evaluate(()=>{current.sources.push({id:uid(),title:'Histoire des Berbères/Nefouça',url:'https://fr.wikisource.org/?curid=3599134'});document.querySelector('[data-tab="sources"]').click()});

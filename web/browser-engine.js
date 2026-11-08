@@ -190,12 +190,12 @@ window.SANAD_BROWSER = true;
     return (d.query?.search||[]).filter(x=>Number.isSafeInteger(x.pageid)&&x.pageid>0&&typeof x.title==='string'&&x.title.trim()).map(x=>({title:x.title.slice(0,300),url:'https://ar.wikisource.org/?curid='+x.pageid,author:'',detail:'نتيجة في ويكي مصدر العربية؛ طابق النص والطبعة مع المصدر الأصلي.',access:'صفحة ضمن مكتبة نصية؛ لم يُقرأ نصها آليًا. راجع الإتاحة والترخيص والطبعة.'}));
   }
   async function wikisourceOther(q,lang){
-    const labels={en:'الإنجليزية',fr:'الفرنسية'};if(!Object.hasOwn(labels,lang))throw Error('لغة ويكي مصدر غير مدعومة');
+    const labels={en:'الإنجليزية',fr:'الفرنسية',fa:'الفارسية',tr:'التركية'};if(!Object.hasOwn(labels,lang))throw Error('لغة ويكي مصدر غير مدعومة');
     const d=await getJSON('https://'+lang+'.wikisource.org/w/api.php?'+params({action:'query',list:'search',srsearch:q,srnamespace:'0',srlimit:'10',format:'json',formatversion:'2',origin:'*'}));
     return (d.query?.search||[]).filter(x=>Number.isSafeInteger(x.pageid)&&x.pageid>0&&typeof x.title==='string'&&x.title.trim()).map(x=>({title:x.title.slice(0,300),url:'https://'+lang+'.wikisource.org/?curid='+x.pageid,author:'',detail:'نتيجة في ويكي مصدر '+labels[lang]+'؛ راجع النسخة والطبعة والترجمة.',access:'سجل صفحة؛ لم يُقرأ النص بعد. راجع الترخيص والسياق.'}));
   }
   async function readWikisourceRendered(id,lang){
-    if(!['ar','en','fr'].includes(lang))throw Error('لغة ويكي مصدر غير مدعومة');
+    if(!['ar','en','fr','fa','tr'].includes(lang))throw Error('لغة ويكي مصدر غير مدعومة');
     if(typeof id!=='string'||!/^[1-9][0-9]{0,12}$/.test(id))throw Error('معرّف صفحة ويكي مصدر غير صالح');
     const url='https://'+lang+'.wikisource.org/w/api.php?'+params({action:'parse',pageid:id,prop:'text|revid',format:'json',formatversion:'2',origin:'*'});
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);let size=0,chunks=[],d;
@@ -388,7 +388,7 @@ window.SANAD_BROWSER = true;
   }
   async function research(q, selected) {
     q=queryText(q);
-    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['ويكي مصدر الإنجليزية',()=>wikisourceOther(q,'en')],['ويكي مصدر الفرنسية',()=>wikisourceOther(q,'fr')],['Internet Archive',()=>internetArchive(q)],['DOAJ',()=>doaj(q)],['OpenAlex',()=>openalex(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')],['مخطوطات مالي الإسلامية',()=>loc(q,'islamic-manuscripts-from-mali')]];
+    const providers=[['Crossref',async()=> (await crossref(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'DOI: '+x.doi,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Open Library',async()=> (await openlibrary(q)).map(x=>({title:x.title,url:x.url,author:x.author,detail:'سنة طبعة مفهرسة: '+x.year,access:'بيانات فهرسية — تحقق من النص الكامل'}))],['Wikimedia Commons',()=>commons(q)],['إحالات ويكيبيديا العربية',()=>wikiCitations(q)],['ويكي مصدر العربية',()=>wikisource(q)],['ويكي مصدر الإنجليزية',()=>wikisourceOther(q,'en')],['ويكي مصدر الفرنسية',()=>wikisourceOther(q,'fr')],['ويكي مصدر الفارسية',()=>wikisourceOther(q,'fa')],['ويكي مصدر التركية',()=>wikisourceOther(q,'tr')],['Internet Archive',()=>internetArchive(q)],['DOAJ',()=>doaj(q)],['OpenAlex',()=>openalex(q)],['المكتبة الرقمية العالمية',()=>loc(q,'world-digital-library')],['صحف Chronicling America',()=>loc(q,'chronicling-america')],['مخطوطات مالي الإسلامية',()=>loc(q,'islamic-manuscripts-from-mali')]];
     if(selected!==undefined&&(typeof selected!=='string'||!providers.some(p=>p[0]===selected)))throw Error('المصدر غير مدعوم');
     const requested=selected===undefined?providers:providers.filter(p=>p[0]===selected);
     const outcomes=await Promise.all(requested.map(async ([provider,fn])=>{try{const items=await fn();return {provider,items,status:'اكتمل',reason:''};}catch(e){const message=String(e?.message||'');return {provider,items:[],status:'تعذر الاتصال أو قراءة الاستجابة',reason:(/^HTTP [0-9]{3}$/.test(message)||message==='انتهت مهلة الاتصال')?message:'تحقق من الاتصال أو قيود المتصفح'};}}));
