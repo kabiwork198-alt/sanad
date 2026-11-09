@@ -16,6 +16,8 @@ jobs:
           node-version: '22'
       - run: node --check web/app.js
       - run: node --check web/original-record.js
+      - run: node --check web/bodleian-manifest.js
+      - run: node tests/test_bodleian_manifest.cjs
       - run: node tests/test_original_record.cjs
       - run: node --check web/cloud-ai.js
       - run: node tests/test_cloud_ai.cjs
@@ -63,6 +65,10 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
       - name: Test responsive interface, save races and file integrity
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_quality.cjs && NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_initial_load.cjs
+      - name: Test Bodleian page references and persistence (synthetic manifest)
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_bodleian.py
+      - name: Diagnose one real Bodleian manifest and page (diagnostic)
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_bodleian_live.py
       - name: Test original record attribution and persistence (synthetic Commons)
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_original_record.py
       - name: Diagnose one real Commons file record in both modes
