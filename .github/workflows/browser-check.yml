@@ -55,12 +55,16 @@ jobs:
         run: node tests/probe_loc_text.cjs
       - name: Check public catalogs and browser CORS (diagnostic, services may be unavailable)
         run: node tests/check_live_services.cjs
+      - name: Probe cloud provider CORS without credentials (diagnostic)
+        run: node tests/probe_cloud_cors.cjs
       - name: Install browser test driver
         run: npm install --prefix "$RUNNER_TEMP/sanad-qa" puppeteer-core@24 --no-audit --no-fund
       - name: Test responsive interface, save races and file integrity
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_quality.cjs && NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" node tests/ui_initial_load.cjs
       - name: Test cloud assistant consent in browser and local modes (synthetic providers)
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_cloud_ai.py
+      - name: Test cloud research routing with local sources (synthetic provider)
+        run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_cloud_research.py
       - name: Test attributed passage alignment in browser and local modes
         run: NODE_PATH="$RUNNER_TEMP/sanad-qa/node_modules" python tests/ui_local_text_alignment.py
       - name: Test one-record hadith lookup in browser and local modes
