@@ -90,6 +90,7 @@ jobs:
               }
             }
             Test-BundledUi 'tests/ui_real_workflow.cjs'
+            Test-BundledUi 'tests/ui_original_record.cjs'
             Test-BundledUi 'tests/ui_project_conflict.cjs'
             Test-BundledUi 'tests/ui_cloud_ai.cjs'
             Test-BundledUi 'tests/ui_cloud_research.cjs'

@@ -1,0 +1,24 @@
+// UI and source persistence with intercepted Commons fixtures; no real records are implied.
+'use strict';
+const puppeteer=require('puppeteer-core'),origin=new URL(process.env.SANAD_TEST_ORIGIN).origin;
+(async()=>{let browser;try{
+ browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});const p=await browser.newPage(),errors=[];let allow=false,done=null,requests=0,delayed=false;
+ p.on('pageerror',e=>errors.push(e.message));p.on('dialog',async d=>{try{await(d.type()==='prompt'?d.accept('بحث وثائق اختباري'):allow?d.accept():d.dismiss())}finally{done?.()}});
+ async function dialog(selector){let timer;const wait=new Promise((resolve,reject)=>{done=resolve;timer=setTimeout(()=>reject(Error('dialog timeout '+selector)),10000)});try{await Promise.all([p.click(selector),wait])}finally{clearTimeout(timer);done=null}}
+ await p.setRequestInterception(true);p.on('request',r=>{const u=new URL(r.url());if(u.origin==='https://commons.wikimedia.org'&&u.pathname==='/w/api.php'){
+  requests++;const payload={query:{pages:[{pageid:17,ns:6,title:'File:Sample.jpg',imageinfo:[{descriptionurl:'https://commons.wikimedia.org/wiki/File:Sample.jpg',url:'https://upload.wikimedia.org/wikipedia/commons/a/a0/Sample.jpg',mime:'image/jpeg',sha1:'a'.repeat(40),timestamp:'2026-01-01T00:00:00Z',extmetadata:{ImageDescription:{value:'<b>وصف افتراضي</b><img src=x onerror=alert(1)>'},Credit:{value:'مؤسسة افتراضية'},LicenseShortName:{value:'ترخيص تجريبي'}}}]}]}};
+  const response={status:200,headers:{'access-control-allow-origin':'*','content-type':'application/json'},body:JSON.stringify(payload)};if(delayed){setTimeout(()=>r.respond(response).catch(()=>{}),700);return}return r.respond(response);
+ }if(u.origin===origin||['data:','blob:'].includes(u.protocol))return r.continue();return r.abort()});
+ await p.goto(process.env.SANAD_TEST_ORIGIN,{waitUntil:'load'});await dialog('#empty-new');await p.waitForSelector('[data-field="question"]');await p.click('[data-tab="sources"]');await p.click('[data-add="sources"]');
+ const set=async(field,value)=>p.$eval(`[data-group="sources"][data-index="0"][data-item-field="${field}"]`,(e,v)=>{e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}))},value);
+ await set('title','وثيقة اختبار');await set('url','https://commons.wikimedia.org/wiki/File:Sample.jpg');await p.click('[data-tab="overview"]');await p.click('[data-tab="sources"]');await p.click('#content details.notice summary');
+ await set('archiveHolder','دار اختبار');await set('archiveReference','MS 17');await set('archiveFolio','ورقة 2');await set('archiveRights','مراجعة الحقوق لازمة');
+ await dialog('[data-original-fetch="0"]');if(requests!==0)throw Error('request without consent');allow=true;await dialog('[data-original-fetch="0"]');await p.waitForSelector('[data-original-apply="0"]');if(requests!==1||await p.$('#content img'))throw Error('wrong request count or unsafe html');
+ if(!(await p.$eval('#content',e=>e.textContent)).includes('مؤسسة افتراضية'))throw Error('metadata preview missing');if(await p.evaluate(()=>!!current.sources[0].commonsRecord))throw Error('preview saved without approval');
+ await p.click('[data-original-apply="0"]');const source=await p.evaluate(()=>current.sources[0]);if(source.archiveHolder!=='دار اختبار'||source.archiveReference!=='MS 17'||source.archiveFolio!=='ورقة 2'||!JSON.parse(source.commonsRecord).sha1)throw Error('source provenance missing');
+ const report=await p.evaluate(()=>buildResearchReport(current));for(const item of ['MS 17','ورقة 2','مؤسسة افتراضية','https://commons.wikimedia.org/wiki/File:Sample.jpg'])if(!report.includes(item))throw Error('report missing '+item);
+ await p.click('#save');await p.waitForFunction(()=>!dirty&&!saveInFlight);const id=await p.evaluate(()=>current.id);await p.reload({waitUntil:'load'});await p.waitForSelector(`[data-project="${id}"]`);await p.click(`[data-project="${id}"]`);await p.click('[data-tab="sources"]');const restored=await p.evaluate(()=>current.sources[0]);if(restored.archiveReference!=='MS 17'||!JSON.parse(restored.commonsRecord).title)throw Error('data lost after reload');
+ // A changed record while a request is in flight must never appear as if it came from the new URL.
+ await p.click('#content details.notice summary');delayed=true;await dialog('[data-original-fetch="0"]');await set('url','https://commons.wikimedia.org/wiki/File:Other.jpg');await p.waitForFunction(()=>document.querySelector('#toast').textContent.includes('تغير المشروع أو رابط المصدر'));if(await p.$('[data-original-apply="0"]'))throw Error('stale preview displayed');
+ if(errors.length)throw Error(errors.join('; '));console.log('PASS: consent, metadata preview, manual provenance, save/reload, report and stale guard (synthetic Commons)');
+ }finally{if(browser)await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});
