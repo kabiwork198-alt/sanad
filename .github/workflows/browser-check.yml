@@ -59,6 +59,8 @@ jobs:
         run: node tests/probe_loc_text.cjs
       - name: Check public catalogs and browser CORS (diagnostic, services may be unavailable)
         run: node tests/check_live_services.cjs
+      - name: Probe public IIIF hosts and CORS (diagnostic)
+        run: node tests/probe_iiif_hosts.cjs
       - name: Probe cloud provider CORS without credentials (diagnostic)
         run: node tests/probe_cloud_cors.cjs
       - name: Install browser test driver
